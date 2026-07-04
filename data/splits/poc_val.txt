@@ -1,3 +1,0 @@
-data/cache/double_lift_sloth.pt
-data/cache/single_lift_cloth_3.pt
-data/cache/single_push_rope_1.pt

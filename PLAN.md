@@ -1,5 +1,9 @@
 # DINO-Conditioned Particle-Grid Dynamics POC
 
+> Historical V1 design. V1 results are concluded in
+> `docs/v1/CONCLUSION.md`; new development should start from
+> `V2_CONTEXT.md` and `docs/v2/PLAN.md`.
+
 ## Summary
 
 Build an action-conditioned, MPM-inspired neural surrogate for the 22 PhysTwin/MatPhys scenarios. Persistent particles carry frozen DINOv3 appearance features; compressed features are scattered onto a 32-cubed grid so a 3D U-Net is explicitly DINO-conditioned. The predicted next grid guides per-particle displacement, after which the next input grid is reconstructed from moved particles.

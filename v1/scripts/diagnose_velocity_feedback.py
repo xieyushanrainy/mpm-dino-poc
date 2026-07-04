@@ -73,7 +73,7 @@ def main():
     parser.add_argument("--horizons", nargs="+", type=int, default=[4, 8, 16])
     parser.add_argument("--stride", type=int, default=8)
     parser.add_argument("--device", default=default_device())
-    parser.add_argument("--output", default="runs/velocity_feedback_sweep.csv")
+    parser.add_argument("--output", default="v1/work/velocity_feedback_sweep.csv")
     args = parser.parse_args()
     if any(not 0 <= alpha <= 1 for alpha in args.alphas):
         raise ValueError("alphas must lie in [0,1]")

@@ -1,3 +1,7 @@
+> Project status, 2026-07-04: V1 is concluded. See
+> [`docs/v1/CONCLUSION.md`](docs/v1/CONCLUSION.md) and
+> [`V2_CONTEXT.md`](V2_CONTEXT.md) before beginning V2 work.
+
 ## Papers and Datasets
 
 ### PhysCtrl
@@ -318,7 +322,7 @@ This supports a POC design in which DINO features are projected onto MPM particl
 - Combining visual features with observed probe motion.
 - Learned material embeddings as an alternative to direct parameter regression.
 
-A local implementation note is available at [`reference/dino-2d-to-3d-mapping.md`](reference/dino-2d-to-3d-mapping.md).
+A local implementation note is available at [`docs/reference/dino-2d-to-3d-mapping.md`](docs/reference/dino-2d-to-3d-mapping.md).
 
 **Reference only:**
 

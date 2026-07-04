@@ -125,7 +125,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--device", default=default_device())
-    parser.add_argument("--output", default="runs/rollout_s2")
+    parser.add_argument("--output", default="v1/work/rollout_s2")
     parser.add_argument("--lr", type=float, default=2.5e-5)
     parser.add_argument("--particle-beta", type=float, default=0.01)
     parser.add_argument("--discount", type=float, default=0.9)

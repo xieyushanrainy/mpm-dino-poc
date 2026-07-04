@@ -107,3 +107,43 @@ class ScenePairDataset(Dataset):
             "scale": s["scale"], "dt": dt, "target_displacement": target_displacement,
             "target_velocity": target_velocity,
         }
+
+
+class SceneSequenceDataset(Dataset):
+    """Contiguous windows with one previous frame for recurrent initialization."""
+
+    def __init__(self, paths: list[str | Path], steps: int):
+        if steps < 2:
+            raise ValueError("rollout steps must be at least 2")
+        self.steps = steps
+        self.scenes = [torch.load(path, map_location="cpu", weights_only=True) for path in paths]
+        self.index = [
+            (scene_id, t)
+            for scene_id, scene in enumerate(self.scenes)
+            for t in range(1, scene["points"].shape[0] - steps)
+        ]
+        self.motion_scores = []
+        for scene_id, t in self.index:
+            scene = self.scenes[scene_id]
+            valid = scene["visible"][t:t + steps + 1] & scene["motion_valid"][t:t + steps + 1]
+            displacement = scene["points"][t + 1:t + steps + 1] - scene["points"][t:t + steps]
+            step_valid = valid[1:] & valid[:-1]
+            magnitude = torch.linalg.vector_norm(displacement, dim=-1)
+            self.motion_scores.append(float((magnitude * step_valid).sum() / step_valid.sum().clamp_min(1)))
+
+    def __len__(self):
+        return len(self.index)
+
+    def __getitem__(self, item):
+        scene_id, t = self.index[item]
+        scene = self.scenes[scene_id]
+        end = t + self.steps + 1
+        return {
+            "previous_points": scene["points"][t - 1],
+            "points": scene["points"][t:end],
+            "visible": scene["visible"][t:end],
+            "motion_valid": scene["motion_valid"][t:end],
+            "controller": scene["controller"][t:end],
+            "dino": scene["dino"], "dino_imputed": scene["dino_imputed"],
+            "scale": scene["scale"], "dt": scene["dt"],
+        }

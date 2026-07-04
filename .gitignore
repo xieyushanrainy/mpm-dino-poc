@@ -1,0 +1,24 @@
+.DS_Store
+.pytest_cache/
+**/__pycache__/
+*.py[cod]
+
+# Large generated/local data. Keep split manifests and schema READMEs tracked.
+data/shared/dino/
+data/v1/cache/
+
+# Superseded local runs are documented under docs/v1.
+archive/v1_runs/
+
+# Keep summaries, histories and CSV diagnostics; exclude large model/video blobs.
+v1/artifacts/**/*.pt
+v1/artifacts/**/*.mp4
+v1/artifacts/**/*.png
+v1/artifacts/**/*.jpg
+
+v1/work/
+v2/runs/*
+!v2/runs/README.md
+v2/artifacts/**/*.pt
+v2/artifacts/**/*.mp4
+

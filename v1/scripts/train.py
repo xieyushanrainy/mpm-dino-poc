@@ -66,7 +66,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=20, help="Maximum additional epochs, including when resuming")
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--device", default=default_device())
-    parser.add_argument("--output", default="runs/one_step")
+    parser.add_argument("--output", default="v1/work/one_step")
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--particle-beta", type=float, default=0.01)
