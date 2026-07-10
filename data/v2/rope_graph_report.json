@@ -1,0 +1,16 @@
+{
+  "single_lift_rope": {
+    "particle_count": 1630,
+    "directed_edge_count": 12158,
+    "undirected_edge_count": 6079,
+    "isolated_particle_count": 0,
+    "connected_components": 1,
+    "degree_min": 2,
+    "degree_median": 8.0,
+    "degree_max": 8,
+    "length_min": 0.001823544385842979,
+    "length_median": 0.013903546147048473,
+    "length_p95": 0.02039637789130211,
+    "length_max": 0.031164394691586494
+  }
+}

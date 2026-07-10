@@ -1,0 +1,16 @@
+{
+  "single_lift_sloth": {
+    "particle_count": 2048,
+    "directed_edge_count": 15114,
+    "undirected_edge_count": 7557,
+    "isolated_particle_count": 1,
+    "connected_components": 2,
+    "degree_min": 0,
+    "degree_median": 8.0,
+    "degree_max": 8,
+    "length_min": 0.0022808900102972984,
+    "length_median": 0.02241963893175125,
+    "length_p95": 0.03639176860451698,
+    "length_max": 0.06458362191915512
+  }
+}
