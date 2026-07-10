@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 
-SEEDS = (42, 123, 456)
+DEFAULT_SEEDS = (42, 123, 456)
 HORIZONS = ("1", "4", "8", "16")
 VARIANTS = ("graph_direct", "latent_graph", "action_token_graph")
 
@@ -66,7 +66,7 @@ def h4_h8_score(path: Path) -> float:
     return 0.5 * (result["horizons"]["4"]["particle_mean"] + result["horizons"]["8"]["particle_mean"])
 
 
-def summarize(root: Path, variants: list[tuple[str, str]], seeds=SEEDS):
+def summarize(root: Path, variants: list[tuple[str, str]], seeds):
     summary = {}
     for variant, mode in variants:
         values = []
@@ -81,6 +81,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", default="mps")
     parser.add_argument("--output-root", type=Path)
+    parser.add_argument("--seeds", nargs="+", type=int, default=list(DEFAULT_SEEDS))
     args = parser.parse_args()
     project = Path(__file__).resolve().parents[2]
     root = args.output_root or project / "v3" / "runs" / "architecture_screen"
@@ -90,16 +91,17 @@ def main():
     val_caches = cache_paths(cache_dir, manifests / "poc_val.txt")
     test_caches = cache_paths(cache_dir, manifests / "poc_test.txt")
 
-    for seed in SEEDS:
+    seeds = tuple(args.seeds)
+    for seed in seeds:
         baseline = train_v2_particle(project, root, seed, train_caches, val_caches, args.device)
         evaluate(project, baseline, val_caches, root / "baseline_particle_only" / f"seed{seed}" / "validation_horizons.json", False, args.device)
 
     for variant in VARIANTS:
-        for seed in SEEDS:
+        for seed in seeds:
             checkpoint = train_v3(project, root, variant, seed, "final", train_caches, val_caches, args.device)
             evaluate(project, checkpoint, val_caches, root / variant / "final" / f"seed{seed}" / "validation_horizons.json", True, args.device)
 
-    screen = summarize(root, [(variant, "final") for variant in VARIANTS])
+    screen = summarize(root, [(variant, "final") for variant in VARIANTS], seeds)
     winner = min(screen, key=lambda key: screen[key]["h4_h8_mean"])
     winner_variant, _ = winner.split(":")
     (root / "screen_summary.json").write_text(json.dumps({"screen": screen, "winner": winner}, indent=2) + "\n")
@@ -109,17 +111,17 @@ def main():
     if winner_variant == "latent_graph":
         control_modes.append("geometry_only")
     for mode in control_modes:
-        for seed in SEEDS:
+        for seed in seeds:
             checkpoint = train_v3(project, root, winner_variant, seed, mode, train_caches, val_caches, args.device)
             evaluate(project, checkpoint, val_caches, root / winner_variant / mode / f"seed{seed}" / "validation_horizons.json", True, args.device)
 
-    for seed in SEEDS:
+    for seed in seeds:
         baseline = root / "baseline_particle_only" / f"seed{seed}" / "one_step" / "best.pt"
         evaluate(project, baseline, test_caches, root / "baseline_particle_only" / f"seed{seed}" / "test_horizons.json", False, args.device)
         winner_checkpoint = root / winner_variant / "final" / f"seed{seed}" / "one_step" / "best.pt"
         evaluate(project, winner_checkpoint, test_caches, root / winner_variant / "final" / f"seed{seed}" / "test_horizons.json", True, args.device)
 
-    controls = summarize(root, [(winner_variant, mode) for mode in ["final", *control_modes]])
+    controls = summarize(root, [(winner_variant, mode) for mode in ["final", *control_modes]], seeds)
     (root / "dino_control_summary.json").write_text(json.dumps({"winner": winner_variant, "controls": controls}, indent=2) + "\n")
     print(f"selected V3 variant: {winner_variant}", flush=True)
 

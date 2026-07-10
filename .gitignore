@@ -3,9 +3,16 @@
 **/__pycache__/
 *.py[cod]
 
-# Large generated/local data. Keep split manifests and schema READMEs tracked.
+# Large generated/local data. Keep split manifests and selected reports tracked.
 data/shared/dino/
 data/v1/cache/
+data/v2/cache/
+data/v2/cache_*/
+data/v2/dino_layers/
+data/v2/*_graph_report.json
+!data/v2/graph_report_all.json
+!data/v2/rope_graph_report.json
+!data/v2/sloth_graph_report.json
 
 # Superseded local runs are documented under docs/v1.
 archive/v1_runs/
@@ -18,7 +25,9 @@ v1/artifacts/**/*.jpg
 
 v1/work/
 v2/runs/*
-!v2/runs/README.md
 v2/artifacts/**/*.pt
 v2/artifacts/**/*.mp4
 
+v3/runs/*
+v3/artifacts/**/*.pt
+v3/artifacts/**/*.mp4
