@@ -1,0 +1,12 @@
+{
+  "mode": "raw_dino",
+  "checkpoint": null,
+  "scene_count": 22,
+  "pca_explained_variance": [
+    0.36943086981773376,
+    0.23306512832641602
+  ],
+  "nearest_family_accuracy_2d": 0.8181818181818182,
+  "csv": "v3/artifacts/latent_viz/raw_dino_pca.csv",
+  "svg": "v3/artifacts/latent_viz/raw_dino_pca.svg"
+}

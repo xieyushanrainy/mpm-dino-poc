@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="680" viewBox="0 0 920 680">
+<rect width="100%" height="100%" fill="white"/>
+<text x="70" y="34" font-family="Arial" font-size="22" font-weight="700">V3 learned object latents</text>
+<text x="70" y="58" font-family="Arial" font-size="13" fill="#475569">PC1 99.1% / PC2 0.7% variance</text>
+<line x1="70" y1="610" x2="850" y2="610" stroke="#cbd5e1"/>
+<line x1="70" y1="70" x2="70" y2="610" stroke="#cbd5e1"/>
+<circle cx="124.50345332864026" cy="479.37596252457394" r="6" fill="#3b82f6"><title>double_lift_cloth_1 | train | cloth | double_lift</title></circle>
+<text x="132.50345332864026" y="483.37596252457394" font-family="Arial" font-size="10" fill="#334155">double_lift_cloth_1</text>
+<circle cx="98.48698904738563" cy="406.34100723095764" r="6" fill="#3b82f6"><title>double_lift_cloth_3 | train | cloth | double_lift</title></circle>
+<text x="106.48698904738563" y="410.34100723095764" font-family="Arial" font-size="10" fill="#334155">double_lift_cloth_3</text>
+<circle cx="583.1191702474249" cy="374.21244454595166" r="6" fill="#111827"><title>double_lift_zebra | train | zebra | double_lift</title></circle>
+<text x="591.1191702474249" y="378.21244454595166" font-family="Arial" font-size="10" fill="#334155">double_lift_zebra</text>
+<circle cx="422.7477459711166" cy="383.0595768999038" r="6" fill="#9333ea"><title>double_stretch_sloth | train | sloth | double_stretch</title></circle>
+<text x="430.7477459711166" y="387.0595768999038" font-family="Arial" font-size="10" fill="#334155">double_stretch_sloth</text>
+<circle cx="241.93713006184106" cy="70.0" r="6" fill="#16a34a"><title>rope_double_hand | train | rope | double_hand</title></circle>
+<text x="249.93713006184106" y="74.0" font-family="Arial" font-size="10" fill="#334155">rope_double_hand</text>
+<circle cx="129.07415634803476" cy="453.52035551816476" r="6" fill="#3b82f6"><title>single_clift_cloth_1 | train | cloth | single_clift</title></circle>
+<text x="137.07415634803476" y="457.52035551816476" font-family="Arial" font-size="10" fill="#334155">single_clift_cloth_1</text>
+<circle cx="160.62900731400094" cy="427.7682738136439" r="6" fill="#3b82f6"><title>single_clift_cloth_3 | train | cloth | single_clift</title></circle>
+<text x="168.62900731400094" y="431.7682738136439" font-family="Arial" font-size="10" fill="#334155">single_clift_cloth_3</text>
+<circle cx="286.49218065853086" cy="441.0205134111219" r="6" fill="#3b82f6"><title>single_lift_cloth | train | cloth | single_lift</title></circle>
+<text x="294.49218065853086" y="445.0205134111219" font-family="Arial" font-size="10" fill="#334155">single_lift_cloth</text>
+<circle cx="404.8708304355223" cy="497.94389356489194" r="6" fill="#3b82f6"><title>single_lift_cloth_1 | train | cloth | single_lift</title></circle>
+<text x="412.8708304355223" y="501.94389356489194" font-family="Arial" font-size="10" fill="#334155">single_lift_cloth_1</text>
+<circle cx="850.0" cy="498.0100488593779" r="6" fill="#f97316"><title>single_lift_dinosor | train | dinosor | single_lift</title></circle>
+<text x="858.0" y="502.0100488593779" font-family="Arial" font-size="10" fill="#334155">single_lift_dinosor</text>
+<circle cx="307.0838008558258" cy="566.5444828693688" r="6" fill="#16a34a"><title>single_lift_rope | train | rope | single_lift</title></circle>
+<text x="315.0838008558258" y="570.5444828693688" font-family="Arial" font-size="10" fill="#334155">single_lift_rope</text>
+<circle cx="558.4876178437538" cy="412.27576974643586" r="6" fill="#9333ea"><title>single_lift_sloth | train | sloth | single_lift</title></circle>
+<text x="566.4876178437538" y="416.27576974643586" font-family="Arial" font-size="10" fill="#334155">single_lift_sloth</text>
+<circle cx="676.5238641557378" cy="403.478658410113" r="6" fill="#111827"><title>single_lift_zebra | train | zebra | single_lift</title></circle>
+<text x="684.5238641557378" y="407.478658410113" font-family="Arial" font-size="10" fill="#334155">single_lift_zebra</text>
+<circle cx="309.99144861185925" cy="610.0" r="6" fill="#16a34a"><title>single_push_rope | train | rope | single_push</title></circle>
+<text x="317.99144861185925" y="614.0" font-family="Arial" font-size="10" fill="#334155">single_push_rope</text>
+<circle cx="70.0" cy="470.04790735626426" r="6" fill="#16a34a"><title>single_push_rope_4 | train | rope | single_push</title></circle>
+<text x="78.0" y="474.04790735626426" font-family="Arial" font-size="10" fill="#334155">single_push_rope_4</text>
+<circle cx="377.9945487476809" cy="599.7632376103808" r="6" fill="#dc2626"><title>weird_package | train | package | other</title></circle>
+<text x="385.9945487476809" y="603.7632376103808" font-family="Arial" font-size="10" fill="#334155">weird_package</text>
+<polygon points="433.2881378535009,400.0787498165291 426.2881378535009,413.0787498165291 440.2881378535009,413.0787498165291" fill="#9333ea"><title>double_lift_sloth | val | sloth | double_lift</title></polygon>
+<text x="441.2881378535009" y="411.0787498165291" font-family="Arial" font-size="10" fill="#334155">double_lift_sloth</text>
+<polygon points="298.00348181845004,490.0640836742553 291.00348181845004,503.0640836742553 305.00348181845004,503.0640836742553" fill="#3b82f6"><title>single_lift_cloth_3 | val | cloth | single_lift</title></polygon>
+<text x="306.00348181845004" y="501.0640836742553" font-family="Arial" font-size="10" fill="#334155">single_lift_cloth_3</text>
+<polygon points="158.24278975449866,403.4016493492056 151.24278975449866,416.4016493492056 165.24278975449866,416.4016493492056" fill="#16a34a"><title>single_push_rope_1 | val | rope | single_push</title></polygon>
+<text x="166.24278975449866" y="414.4016493492056" font-family="Arial" font-size="10" fill="#334155">single_push_rope_1</text>
+<rect x="550.8120226188884" y="319.4644364319833" width="12" height="12" fill="#111827"><title>double_stretch_zebra | test | zebra | double_stretch</title></rect>
+<text x="564.8120226188884" y="329.4644364319833" font-family="Arial" font-size="10" fill="#334155">double_stretch_zebra</text>
+<rect x="221.86482413705176" y="387.9915489387596" width="12" height="12" fill="#3b82f6"><title>single_lift_cloth_4 | test | cloth | single_lift</title></rect>
+<text x="235.86482413705176" y="397.9915489387596" font-family="Arial" font-size="10" fill="#334155">single_lift_cloth_4</text>
+<rect x="532.6943997116266" y="433.1923601358149" width="12" height="12" fill="#9333ea"><title>single_push_sloth | test | sloth | single_push</title></rect>
+<text x="546.6943997116266" y="443.1923601358149" font-family="Arial" font-size="10" fill="#334155">single_push_sloth</text>
+<text x="700" y="70" font-family="Arial" font-size="13" font-weight="700">family color</text>
+<circle cx="700" cy="88" r="6" fill="#3b82f6"/>
+<text x="714" y="92" font-family="Arial" font-size="12">cloth</text>
+<circle cx="700" cy="108" r="6" fill="#16a34a"/>
+<text x="714" y="112" font-family="Arial" font-size="12">rope</text>
+<circle cx="700" cy="128" r="6" fill="#9333ea"/>
+<text x="714" y="132" font-family="Arial" font-size="12">sloth</text>
+<circle cx="700" cy="148" r="6" fill="#111827"/>
+<text x="714" y="152" font-family="Arial" font-size="12">zebra</text>
+<circle cx="700" cy="168" r="6" fill="#f97316"/>
+<text x="714" y="172" font-family="Arial" font-size="12">dinosor</text>
+<circle cx="700" cy="188" r="6" fill="#dc2626"/>
+<text x="714" y="192" font-family="Arial" font-size="12">package</text>
+<circle cx="700" cy="208" r="6" fill="#64748b"/>
+<text x="714" y="212" font-family="Arial" font-size="12">other</text>
+</svg>

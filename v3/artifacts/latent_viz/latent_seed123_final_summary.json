@@ -1,0 +1,13 @@
+{
+  "mode": "latent",
+  "dino_mode": "final",
+  "checkpoint": "v3/runs/latent_long_lr/seed123/final/one_step/best.pt",
+  "scene_count": 22,
+  "pca_explained_variance": [
+    0.5712751746177673,
+    0.22056907415390015
+  ],
+  "nearest_family_accuracy_2d": 0.2727272727272727,
+  "csv": "v3/artifacts/latent_viz/latent_seed123_final_pca.csv",
+  "svg": "v3/artifacts/latent_viz/latent_seed123_final_pca.svg"
+}
