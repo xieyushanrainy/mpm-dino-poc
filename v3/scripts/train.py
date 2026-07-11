@@ -23,6 +23,31 @@ MODEL_KEYS = [
 SELECTION_METRIC = "val_particle_mean"
 
 
+DINO_MODES = ("final", "zero", "shuffled_particles", "scene_shuffled", "geometry_only")
+
+
+def scene_donor_order(scene_count: int, seed: int) -> list[int]:
+    if scene_count <= 1:
+        return list(range(scene_count))
+    generator = torch.Generator().manual_seed(seed)
+    order = torch.randperm(scene_count, generator=generator).tolist()
+    return order[1:] + order[:1]
+
+
+class SceneShuffledPairDataset(ScenePairDataset):
+    def __init__(self, paths: list[str | Path], seed: int):
+        super().__init__(paths)
+        self.donor_order = scene_donor_order(len(self.scenes), seed)
+
+    def __getitem__(self, item):
+        result = super().__getitem__(item)
+        scene_id, _ = self.index[item]
+        donor = self.scenes[self.donor_order[scene_id]]
+        result["dino"] = donor["dino"]
+        result["dino_imputed"] = donor["dino_imputed"]
+        return result
+
+
 def move(batch, device):
     return {key: value.to(device) if torch.is_tensor(value) else value for key, value in batch.items()}
 
@@ -33,7 +58,7 @@ def apply_dino_mode(batch, mode: str):
     elif mode == "shuffled_particles":
         batch["dino"] = torch.roll(batch["dino"], shifts=1, dims=1)
         batch["dino_imputed"] = torch.roll(batch["dino_imputed"], shifts=1, dims=1)
-    elif mode != "final":
+    elif mode not in {"final", "scene_shuffled"}:
         raise ValueError(f"unsupported DINO mode: {mode}")
     return batch
 
@@ -103,20 +128,27 @@ def main() -> None:
     parser.add_argument("--min-relative-improvement", type=float, default=0.005)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--variant", choices=("graph_direct", "latent_graph", "action_token_graph"), required=True)
-    parser.add_argument("--dino-mode", choices=("final", "zero", "shuffled_particles", "geometry_only"), default="final")
+    parser.add_argument("--dino-mode", choices=DINO_MODES, default="final")
     parser.add_argument("--hidden-dim", type=int, default=128)
     parser.add_argument("--latent-dim", type=int, default=32)
     parser.add_argument("--dino-embed-dim", type=int, default=16)
     parser.add_argument("--layers", type=int, default=3)
     parser.add_argument("--attention-heads", type=int, default=4)
     parser.add_argument("--resolution", type=int, default=32)
+    parser.add_argument("--latent-geometry-mode", choices=("full", "bottleneck", "none"), default="full")
+    parser.add_argument("--latent-geometry-dim", type=int, default=3)
     args = parser.parse_args()
     if args.early_stop_patience <= args.lr_patience:
         raise ValueError("early-stop-patience must exceed lr-patience")
     if args.dino_mode == "geometry_only" and args.variant != "latent_graph":
         raise ValueError("geometry_only DINO mode is only defined for the latent_graph variant")
     torch.manual_seed(args.seed)
-    train_data, val_data = ScenePairDataset(args.caches), ScenePairDataset(args.val_caches)
+    dataset_cls = SceneShuffledPairDataset if args.dino_mode == "scene_shuffled" else ScenePairDataset
+    if args.dino_mode == "scene_shuffled":
+        train_data = dataset_cls(args.caches, args.seed)
+        val_data = dataset_cls(args.val_caches, args.seed)
+    else:
+        train_data, val_data = dataset_cls(args.caches), dataset_cls(args.val_caches)
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_data, batch_size=args.batch_size)
     device = torch.device(args.device)
@@ -124,6 +156,7 @@ def main() -> None:
         dino_dim=train_data.scenes[0]["dino"].shape[-1], dino_embed_dim=args.dino_embed_dim,
         hidden_dim=args.hidden_dim, latent_dim=args.latent_dim, layers=args.layers,
         variant=args.variant, attention_heads=args.attention_heads, resolution=args.resolution,
+        latent_geometry_mode=args.latent_geometry_mode, latent_geometry_dim=args.latent_geometry_dim,
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(

@@ -16,13 +16,21 @@ from mpm_dino_v2.losses import edge_deformation_losses
 from mpm_dino_v3.model import V3ParticleSurrogate
 
 
+def scene_donor_order(scene_count: int, seed: int) -> list[int]:
+    if scene_count <= 1:
+        return list(range(scene_count))
+    generator = torch.Generator().manual_seed(seed)
+    order = torch.randperm(scene_count, generator=generator).tolist()
+    return order[1:] + order[:1]
+
+
 def apply_dino_mode(batch, mode: str):
     if mode in {"zero", "geometry_only"}:
         batch["dino"] = torch.zeros_like(batch["dino"])
     elif mode == "shuffled_particles":
         batch["dino"] = torch.roll(batch["dino"], shifts=1, dims=1)
         batch["dino_imputed"] = torch.roll(batch["dino_imputed"], shifts=1, dims=1)
-    elif mode != "final":
+    elif mode not in {"final", "scene_shuffled"}:
         raise ValueError(f"unsupported DINO mode: {mode}")
     return batch
 
@@ -34,9 +42,9 @@ def predict(model, positions, velocities, scene, start, step, mask, device, dino
     batch = {
         "positions": positions[None],
         "velocities": velocities[None],
-        "dino": scene["dino"].to(device)[None],
+        "dino": scene.get("_dino_override", scene["dino"]).to(device)[None],
         "particle_mask": mask[None],
-        "dino_imputed": scene["dino_imputed"].to(device)[None],
+        "dino_imputed": scene.get("_dino_imputed_override", scene["dino_imputed"]).to(device)[None],
         "controller_positions": controller[start][None],
         "controller_velocity": controller_velocity[None],
         "controller_mask": torch.ones((1, controller.shape[1]), dtype=torch.bool, device=device),
@@ -129,10 +137,17 @@ def main():
     checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
     config = checkpoint["args"]
     scenes = [load_v2_cache(path) for path in args.caches]
+    if config["dino_mode"] == "scene_shuffled":
+        donor_order = scene_donor_order(len(scenes), int(config.get("seed", 0)))
+        for scene_id, donor_id in enumerate(donor_order):
+            scenes[scene_id]["_dino_override"] = scenes[donor_id]["dino"]
+            scenes[scene_id]["_dino_imputed_override"] = scenes[donor_id]["dino_imputed"]
     model = V3ParticleSurrogate(
         dino_dim=scenes[0]["dino"].shape[-1], dino_embed_dim=config["dino_embed_dim"],
         hidden_dim=config["hidden_dim"], latent_dim=config["latent_dim"], layers=config["layers"],
         variant=config["variant"], attention_heads=config["attention_heads"], resolution=config["resolution"],
+        latent_geometry_mode=config.get("latent_geometry_mode", "full"),
+        latent_geometry_dim=config.get("latent_geometry_dim", 3),
     )
     model.load_state_dict(checkpoint["model"])
     device = torch.device(args.device)

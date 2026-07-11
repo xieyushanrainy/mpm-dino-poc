@@ -78,9 +78,19 @@ def load_checkpoint_model(checkpoint_path: Path, dino_dim: int, device: torch.de
         variant=config["variant"],
         attention_heads=config["attention_heads"],
         resolution=config["resolution"],
+        latent_geometry_mode=config.get("latent_geometry_mode", "full"),
+        latent_geometry_dim=config.get("latent_geometry_dim", 3),
     )
     model.load_state_dict(checkpoint["model"])
     return model.to(device).eval(), config
+
+
+def scene_donor_order(scene_count: int, seed: int) -> list[int]:
+    if scene_count <= 1:
+        return list(range(scene_count))
+    generator = torch.Generator().manual_seed(seed)
+    order = torch.randperm(scene_count, generator=generator).tolist()
+    return order[1:] + order[:1]
 
 
 def apply_dino_mode(dino: torch.Tensor, dino_imputed: torch.Tensor, mode: str) -> tuple[torch.Tensor, torch.Tensor]:
@@ -88,7 +98,7 @@ def apply_dino_mode(dino: torch.Tensor, dino_imputed: torch.Tensor, mode: str) -
         return torch.zeros_like(dino), dino_imputed
     if mode == "shuffled_particles":
         return torch.roll(dino, shifts=1, dims=1), torch.roll(dino_imputed, shifts=1, dims=1)
-    if mode == "final":
+    if mode in {"final", "scene_shuffled"}:
         return dino, dino_imputed
     raise ValueError(f"unsupported DINO mode: {mode}")
 
@@ -188,7 +198,7 @@ def main() -> None:
     parser.add_argument("--splits-dir", type=Path, default=Path("data/shared/splits"))
     parser.add_argument("--output-dir", type=Path, default=Path("v3/artifacts/latent_viz"))
     parser.add_argument("--tag", help="Output filename prefix. Defaults to mode/checkpoint DINO mode.")
-    parser.add_argument("--dino-mode", choices=("checkpoint", "final", "zero", "shuffled_particles", "geometry_only"),
+    parser.add_argument("--dino-mode", choices=("checkpoint", "final", "zero", "shuffled_particles", "scene_shuffled", "geometry_only"),
                         default="checkpoint")
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args()
@@ -214,15 +224,17 @@ def main() -> None:
     if args.mode == "latent":
         model, checkpoint_config = load_checkpoint_model(args.checkpoint, scenes[0][2]["dino"].shape[-1], device)
     dino_mode = checkpoint_config.get("dino_mode", "final") if args.dino_mode == "checkpoint" else args.dino_mode
+    donor_order = scene_donor_order(len(scenes), int(checkpoint_config.get("seed", 0)))
 
     vectors = []
     metadata = []
     with torch.no_grad():
-        for split, name, scene in scenes:
+        for scene_id, (split, name, scene) in enumerate(scenes):
             if args.mode == "latent":
                 assert model is not None
-                dino = scene["dino"].to(device)[None]
-                dino_imputed = scene["dino_imputed"].to(device)[None]
+                dino_scene = scenes[donor_order[scene_id]][2] if dino_mode == "scene_shuffled" else scene
+                dino = dino_scene["dino"].to(device)[None]
+                dino_imputed = dino_scene["dino_imputed"].to(device)[None]
                 dino, dino_imputed = apply_dino_mode(dino, dino_imputed, dino_mode)
                 z = model.latent_encoder(
                     scene["x0"].to(device)[None],

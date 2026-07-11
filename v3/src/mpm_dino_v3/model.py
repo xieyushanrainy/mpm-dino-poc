@@ -52,14 +52,42 @@ class GraphMessageLayer(nn.Module):
 
 
 class ObjectLatentEncoder(nn.Module):
-    def __init__(self, dino_dim: int, dino_embed_dim: int, hidden_dim: int, latent_dim: int):
+    def __init__(
+        self,
+        dino_dim: int,
+        dino_embed_dim: int,
+        hidden_dim: int,
+        latent_dim: int,
+        geometry_mode: str = "full",
+        geometry_dim: int = 3,
+    ):
         super().__init__()
+        if geometry_mode not in {"full", "bottleneck", "none"}:
+            raise ValueError(f"unsupported latent geometry mode: {geometry_mode}")
+        if geometry_mode == "full":
+            geometry_dim = 3
+        elif geometry_mode == "none":
+            geometry_dim = 0
+        elif geometry_dim < 1:
+            raise ValueError("latent geometry bottleneck must have at least one dimension")
+        self.geometry_mode = geometry_mode
         self.dino = nn.Sequential(nn.LayerNorm(dino_dim), nn.Linear(dino_dim, 64), nn.SiLU(), nn.Linear(64, dino_embed_dim))
-        self.node = nn.Sequential(nn.Linear(3 + dino_embed_dim + 1, hidden_dim), nn.SiLU(), nn.Linear(hidden_dim, hidden_dim))
+        self.geometry = (
+            nn.Identity()
+            if geometry_mode == "full"
+            else nn.Linear(3, geometry_dim)
+            if geometry_mode == "bottleneck"
+            else None
+        )
+        self.node = nn.Sequential(nn.Linear(geometry_dim + dino_embed_dim + 1, hidden_dim), nn.SiLU(), nn.Linear(hidden_dim, hidden_dim))
         self.out = nn.Sequential(nn.Linear(hidden_dim * 2, hidden_dim), nn.SiLU(), nn.Linear(hidden_dim, latent_dim))
 
     def forward(self, x0: Tensor, dino: Tensor, dino_imputed: Tensor, particle_mask: Tensor) -> Tensor:
-        features = torch.cat((x0, self.dino(dino), dino_imputed[..., None].to(x0.dtype)), dim=-1)
+        parts = []
+        if self.geometry is not None:
+            parts.append(self.geometry(x0))
+        parts.extend((self.dino(dino), dino_imputed[..., None].to(x0.dtype)))
+        features = torch.cat(parts, dim=-1)
         hidden = self.node(features) * particle_mask[..., None].to(x0.dtype)
         weight = particle_mask[..., None].to(x0.dtype)
         mean = hidden.sum(dim=1) / weight.sum(dim=1).clamp_min(1)
@@ -103,6 +131,8 @@ class V3ParticleSurrogate(nn.Module):
         variant: V3Variant = "graph_direct",
         attention_heads: int = 4,
         resolution: int = 32,
+        latent_geometry_mode: str = "full",
+        latent_geometry_dim: int = 3,
     ):
         super().__init__()
         if variant not in {"graph_direct", "latent_graph", "action_token_graph"}:
@@ -112,7 +142,10 @@ class V3ParticleSurrogate(nn.Module):
         if variant != "latent_graph":
             self.dino = nn.Sequential(nn.LayerNorm(dino_dim), nn.Linear(dino_dim, 64), nn.SiLU(), nn.Linear(64, dino_embed_dim))
         if variant == "latent_graph":
-            self.latent_encoder = ObjectLatentEncoder(dino_dim, dino_embed_dim, hidden_dim, latent_dim)
+            self.latent_encoder = ObjectLatentEncoder(
+                dino_dim, dino_embed_dim, hidden_dim, latent_dim,
+                geometry_mode=latent_geometry_mode, geometry_dim=latent_geometry_dim,
+            )
         action_particle_dim = 3 + 1 + 3 + 1 + 1
         action_global_dim = 3 + 1 + 3 + 2 + 1
         geometry_node_dim = 3 + 3 + 3 + 3 + 3 + 1 + 2 + action_particle_dim
