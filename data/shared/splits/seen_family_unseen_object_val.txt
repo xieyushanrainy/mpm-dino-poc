@@ -1,0 +1,4 @@
+data/v1/cache/double_stretch_zebra.pt
+data/v1/cache/single_lift_cloth_4.pt
+data/v1/cache/single_push_rope_1.pt
+data/v1/cache/single_push_sloth.pt

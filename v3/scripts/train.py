@@ -117,6 +117,7 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--device", default="mps")
     parser.add_argument("--output", default="v3/runs/one_step")
+    parser.add_argument("--checkpoint", type=Path, help="optional V3 checkpoint to initialize from")
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--particle-beta", type=float, default=0.01)
     parser.add_argument("--edge-vector-weight", type=float, default=0.25)
@@ -152,12 +153,25 @@ def main() -> None:
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_data, batch_size=args.batch_size)
     device = torch.device(args.device)
+    checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=False) if args.checkpoint else None
+    if checkpoint is not None:
+        config = checkpoint["args"]
+        for key in (
+            "variant", "hidden_dim", "latent_dim", "dino_embed_dim", "layers",
+            "attention_heads", "resolution", "latent_geometry_mode", "latent_geometry_dim",
+        ):
+            if getattr(args, key) != config.get(key, getattr(args, key)):
+                raise ValueError(f"--{key.replace('_', '-')}={getattr(args, key)!r} does not match checkpoint {config.get(key)!r}")
+        if args.dino_mode != config.get("dino_mode", args.dino_mode):
+            raise ValueError(f"--dino-mode={args.dino_mode!r} does not match checkpoint {config.get('dino_mode')!r}")
     model = V3ParticleSurrogate(
         dino_dim=train_data.scenes[0]["dino"].shape[-1], dino_embed_dim=args.dino_embed_dim,
         hidden_dim=args.hidden_dim, latent_dim=args.latent_dim, layers=args.layers,
         variant=args.variant, attention_heads=args.attention_heads, resolution=args.resolution,
         latent_geometry_mode=args.latent_geometry_mode, latent_geometry_dim=args.latent_geometry_dim,
     ).to(device)
+    if checkpoint is not None:
+        model.load_state_dict(checkpoint["model"])
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=args.lr_factor, patience=args.lr_patience,
