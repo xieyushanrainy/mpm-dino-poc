@@ -1,0 +1,32 @@
+{
+  "device": "mps",
+  "width": 128,
+  "blocks": 4,
+  "heads": 4,
+  "results": [
+    {
+      "mechanism": "m1",
+      "parameters": 1402662,
+      "trainable_parameters": 1402662,
+      "iteration_seconds": 5.5330633749836124,
+      "peak_driver_allocated_bytes": 29014179840,
+      "loss": 6.114370346069336
+    },
+    {
+      "mechanism": "m2",
+      "parameters": 1423142,
+      "trainable_parameters": 1423142,
+      "iteration_seconds": 1.539152582990937,
+      "peak_driver_allocated_bytes": 28307456000,
+      "loss": 6.114370346069336
+    },
+    {
+      "mechanism": "m6",
+      "parameters": 1290312,
+      "trainable_parameters": 1290312,
+      "iteration_seconds": 1.102513749996433,
+      "peak_driver_allocated_bytes": 28173238272,
+      "loss": 6.114370346069336
+    }
+  ]
+}

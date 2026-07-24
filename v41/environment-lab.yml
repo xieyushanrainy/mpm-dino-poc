@@ -1,0 +1,16 @@
+name: mpm-dino-v41
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip>=24
+  - numpy=1.26.4
+  - scipy=1.15.3
+  - pytorch=2.8.0
+  - torchvision=0.23.0
+  - pytorch-cuda=12.6
+  - pytest>=8.4,<9
+  - pip:
+      - psutil>=6,<8
