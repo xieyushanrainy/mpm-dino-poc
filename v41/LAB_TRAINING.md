@@ -6,11 +6,11 @@ The single matrix entry point is `v41/run_matrix.py`. Its frozen defaults are:
 - conditions: real and architecture-identical zero DINO;
 - seeds: 42, 123 and 456;
 - width 128, four blocks, four heads;
-- 100-epoch cap;
-- early-stopping patience 15;
+- plateau-driven training with a 1,000-epoch emergency safety ceiling;
+- early-stopping patience 30, counted only after the H1 guard has first passed;
 - `ReduceLROnPlateau` patience 5, factor 0.5 and minimum LR `1e-6`;
 - 40 UID-balanced draws per epoch;
-- CUDA FP16 automatic mixed precision;
+- CUDA FP32 (FP16 AMP is disabled because it produced non-finite losses);
 - M6 adapter LR `2e-4` and trunk LR `2e-5`.
 
 ## Environment and launch without Conda
@@ -39,14 +39,14 @@ PY
 PYTHONPATH=v2/src:v3/src:v4/src \
 python -m pytest v4/tests -q
 
-mkdir -p v41/runs/lab_100ep
+mkdir -p v41/runs/lab_plateau30
 nohup bash -c '
   set -o pipefail
   PYTHONPATH=v2/src:v3/src:v4/src \
   .venv-v41/bin/python -u v41/run_matrix.py 2>&1 |
-  tee -a v41/runs/lab_100ep/console.log
-' > v41/runs/lab_100ep/nohup.log 2>&1 &
-echo $! > v41/runs/lab_100ep/launcher.pid
+  tee -a v41/runs/lab_plateau30/console.log
+' > v41/runs/lab_plateau30/nohup.log 2>&1 &
+echo $! > v41/runs/lab_plateau30/launcher.pid
 ```
 
 Re-running the identical command is the supported resume operation. A run is
@@ -84,8 +84,8 @@ PyTorch/CUDA versions, git commit, manifest hash, and resolved command options.
 ## Monitoring and retrieval
 
 ```bash
-tail -f v41/runs/lab_100ep/console.log
-find v41/runs/lab_100ep -name RUN_COMPLETE.json | wc -l
+tail -f v41/runs/lab_plateau30/console.log
+find v41/runs/lab_plateau30 -name RUN_COMPLETE.json | wc -l
 nvidia-smi
 ```
 
@@ -96,8 +96,8 @@ Retrieve the complete directory, preserving partial checkpoints and metadata:
 
 ```bash
 rsync -av --partial --checksum \
-  LAB_HOST:/path/to/mpm-DINO-poc/v41/runs/lab_100ep/ \
-  v41/runs/lab_100ep/
+  LAB_HOST:/path/to/mpm-DINO-poc/v41/runs/lab_plateau30/ \
+  v41/runs/lab_plateau30/
 ```
 
 Do not retrieve only `best.pt`: later evaluation needs its sibling

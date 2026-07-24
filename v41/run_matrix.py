@@ -122,12 +122,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="v41/dataset")
     parser.add_argument("--manifest", default="v41/manifests/v41_uid_splits.json")
-    parser.add_argument("--runs", default="v41/runs/lab_100ep")
+    parser.add_argument("--runs", default="v41/runs/lab_plateau30")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--seeds", type=int, nargs="+", default=[42, 123, 456])
-    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument(
+        "--epochs", type=int, default=1000,
+        help="Safety ceiling; normal termination is plateau patience.",
+    )
     parser.add_argument("--draws", type=int, default=40)
-    parser.add_argument("--patience", type=int, default=15)
+    parser.add_argument("--patience", type=int, default=30)
     parser.add_argument("--plateau-patience", type=int, default=5)
-    parser.add_argument("--amp", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--amp", action=argparse.BooleanOptionalAction, default=False)
     run(parser.parse_args())

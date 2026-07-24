@@ -159,7 +159,7 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
         "plateau_patience": plateau_patience,
     }
     (output/"config.json").write_text(json.dumps(config, indent=2)+"\n")
-    best, stale, start_epoch = float("inf"), 0, 1
+    best, stale, start_epoch, seen_eligible = float("inf"), 0, 1, zero_h1 is None
     last_path = output/"last.pt"
     if resume and last_path.exists() and not (output/"RUN_COMPLETE.json").exists():
         state = torch.load(last_path, map_location="cpu", weights_only=False)
@@ -175,6 +175,7 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
         if "scaler" in state and use_amp: scaler.load_state_dict(state["scaler"])
         best=float(state.get("best",state["selection"]))
         stale=int(state.get("stale",0)); start_epoch=int(state["epoch"])+1
+        seen_eligible=bool(state.get("seen_eligible", seen_eligible))
         train_sampler.epoch = int(state.get("sampler_epoch", state["epoch"]))
         if "rng_state" in state:
             restore_rng_state(state["rng_state"])
@@ -187,6 +188,7 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
             validation=run_epoch(model,val_loader,torch.device(device),None,accumulation,max_batches,None,use_amp)
             selection=validation["selection_nrmse"]; scheduler.step(selection)
             eligible = zero_h1 is None or validation["h1_rmse_m"] <= 1.10*zero_h1
+            seen_eligible = seen_eligible or eligible
             record={"epoch":epoch,"train":train,"validation":validation,"selection":selection,
                     "h1_guard_eligible":eligible,"lr":[g["lr"] for g in optimizer.param_groups],
                     "seconds":time.perf_counter()-started}
@@ -194,28 +196,38 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
             improved = eligible and selection < best
             if improved:
                 best=selection; stale=0
-            else:
+            elif seen_eligible:
                 stale += 1
             state={"model":model.state_dict(),"optimizer":optimizer.state_dict(),
                    "scheduler":scheduler.state_dict(),"scaler":scaler.state_dict() if use_amp else None,
                    "config":config,"epoch":epoch,"validation":validation,
                    "selection":selection,"best":best,"stale":stale,
+                   "seen_eligible":seen_eligible,
                    "sampler_epoch": train_sampler.epoch, "rng_state": rng_state()}
             atomic_torch_save(state,output/"last.pt")
             if improved:
                 atomic_torch_save(state,output/"best.pt")
             print(f"epoch={epoch:03d} val={selection:.6g} h1={validation['h1_rmse_m']:.6g} eligible={eligible} stale={stale}",flush=True)
-            if stale >= patience: break
-    if not (output/"best.pt").exists():
-        raise RuntimeError("no checkpoint passed the H1 guard")
+            if seen_eligible and stale >= patience: break
+    guarded_checkpoint = output/"best.pt"
+    if not guarded_checkpoint.exists():
+        # Preserve the complete diagnostic run without mislabelling an
+        # H1-ineligible checkpoint as scientifically selectable.
+        diagnostic = output/"ineligible_last.pt"
+        atomic_torch_save(torch.load(output/"last.pt", map_location="cpu", weights_only=False), diagnostic)
     completion = {
-        "status": "complete", "last_epoch": epoch, "best_selection_nrmse": best,
-        "best_checkpoint_sha256": hashlib.sha256((output/"best.pt").read_bytes()).hexdigest(),
+        "status": "complete" if guarded_checkpoint.exists() else "complete_no_h1_eligible_checkpoint",
+        "last_epoch": epoch, "best_selection_nrmse": best if guarded_checkpoint.exists() else None,
+        "h1_guard_ever_eligible": guarded_checkpoint.exists(),
+        "best_checkpoint_sha256": (
+            hashlib.sha256(guarded_checkpoint.read_bytes()).hexdigest()
+            if guarded_checkpoint.exists() else None
+        ),
         "last_checkpoint_sha256": hashlib.sha256((output/"last.pt").read_bytes()).hexdigest(),
         "history_sha256": hashlib.sha256((output/"history.jsonl").read_bytes()).hexdigest(),
     }
     (output/"RUN_COMPLETE.json").write_text(json.dumps(completion,indent=2)+"\n")
-    return output/"best.pt"
+    return guarded_checkpoint if guarded_checkpoint.exists() else output/"last.pt"
 
 
 def benchmark_v41(root, manifest, mechanism, device="mps", hidden_dim=128, blocks=4, heads=4):
