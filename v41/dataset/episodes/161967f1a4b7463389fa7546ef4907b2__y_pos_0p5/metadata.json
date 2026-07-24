@@ -1,0 +1,213 @@
+{
+  "episode_id": "161967f1a4b7463389fa7546ef4907b2__y_pos_0p5",
+  "parent_object_uid": "161967f1a4b7463389fa7546ef4907b2",
+  "family": "rigid",
+  "category": "glass",
+  "velocity_id": "y_pos_0p5",
+  "initial_linear_velocity_m_s": [
+    0.0,
+    0.5,
+    0.0
+  ],
+  "collider_layout_id": "floor_only",
+  "generation_status": "ready",
+  "trajectory_provenance": "generated_v41",
+  "arrays": {
+    "trajectory_positions_m": {
+      "shape": [
+        61,
+        2048,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "point_velocities_m_s": {
+      "shape": [
+        61,
+        2048,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "point_active": {
+      "shape": [
+        61,
+        2048
+      ],
+      "dtype": "bool"
+    },
+    "times_s": {
+      "shape": [
+        61
+      ],
+      "dtype": "float32"
+    },
+    "point_ids": {
+      "shape": [
+        2048
+      ],
+      "dtype": "int32"
+    }
+  },
+  "simulation": {
+    "action": {
+      "colliders": [],
+      "config_path": "/Users/yushanxie/workspace/cgvi/term3/coderepos/DINO_VLM_sim_dataset_gen/configs/action_velocity_y_pos.json",
+      "force_fields": [],
+      "gravity_m_s2": [
+        0.0,
+        0.0,
+        -9.81
+      ],
+      "initial_linear_velocity_m_s": [
+        0.0,
+        0.5,
+        0.0
+      ]
+    },
+    "action_config": "/Users/yushanxie/workspace/cgvi/term3/coderepos/DINO_VLM_sim_dataset_gen/configs/action_velocity_y_pos.json",
+    "action_config_sha256": "5e9f2d7ba4df614c1042d571915e5b6d5de3baa5abf6ef29124e7d6e376690d6",
+    "asset_dir": "/Users/yushanxie/workspace/cgvi/term3/coderepos/DINO_VLM_sim_dataset_gen/v41_velocity_pilot/prepared/objects/161967f1a4b7463389fa7546ef4907b2",
+    "body_parameters": [
+      {
+        "density_kg_m3": 7800.0,
+        "friction": 0.0,
+        "method": "sample_count_weighted_vlm_material_slots",
+        "restitution": 0.0
+      }
+    ],
+    "duration_s": 2.0,
+    "fluid_resolution": null,
+    "fluid_velocity_scale": null,
+    "is_real_selected_solver_output": true,
+    "limitations": "VLM material values are visual priors. Blender Soft Body and Mantaflow controls are not calibrated SI material models. Mixed-route assets are rejected instead of silently collapsing them to one solver.",
+    "object_path": "/Users/yushanxie/workspace/cgvi/term3/coderepos/DINO_VLM_sim_dataset_gen/data/hf-objaverse-v1/glbs/161/161967f1a4b7463389fa7546ef4907b2.glb",
+    "point_trajectory_semantics": "Persistent rest-surface points",
+    "points_and_views_sha256": "052dcb62ed6ba47843ee66d23036d19bc0f80e12431cb29bbce652f3f6aaa38c",
+    "quality_control": {
+      "active_fraction": 1.0,
+      "final_mean_point_displacement_m": 1.2003130912780762,
+      "inferred_initial_linear_velocity_m_s": [
+        0.0,
+        0.5000001788139343,
+        6.866995245213836e-06
+      ],
+      "initial_linear_velocity_error_m_s": 6.869322973983581e-06,
+      "initial_linear_velocity_tolerance_m_s": 0.02,
+      "initial_point_error_m": 0.0,
+      "maximum_point_displacement_m": 1.544423222541809,
+      "requested_initial_linear_velocity_m_s": [
+        0.0,
+        0.5,
+        0.0
+      ]
+    },
+    "resolved_force_fields": [],
+    "rest_geometry_verification_max_error_m": 0.0,
+    "save_fps": 30,
+    "schema_version": 1,
+    "simulation_fps": 60,
+    "soft_body_max_triangles": null,
+    "solver_body_metadata": [
+      {
+        "body_id": 0,
+        "collision_shape": "CONVEX_HULL",
+        "density_kg_m3": 7800.0,
+        "friction": 0.0,
+        "mass_kg": 184.3906054504097,
+        "mass_volume_m3": 0.02363982121159099,
+        "material_proxy_method": "sample_count_weighted_vlm_material_slots",
+        "mesh_volume_m3": 0.02363982121159099,
+        "name": "body_000_asset",
+        "restitution": 0.0
+      }
+    ],
+    "solver_engine": "Blender Bullet",
+    "solver_parameter_mapping": {
+      "mapping": "VLM density/contact values are used directly by Blender Bullet."
+    },
+    "solver_route": "rigid",
+    "uid": "161967f1a4b7463389fa7546ef4907b2",
+    "used_material_slots": [
+      {
+        "body_id": 0,
+        "material": "reused_packaged_material",
+        "material_slot": 0,
+        "semantic_part": "reused_packaged_homogeneous_material",
+        "simulation_model": "rigid"
+      },
+      {
+        "body_id": 0,
+        "material": "reused_packaged_material",
+        "material_slot": 1,
+        "semantic_part": "reused_packaged_homogeneous_material",
+        "simulation_model": "rigid"
+      },
+      {
+        "body_id": 0,
+        "material": "reused_packaged_material",
+        "material_slot": 2,
+        "semantic_part": "reused_packaged_homogeneous_material",
+        "simulation_model": "rigid"
+      },
+      {
+        "body_id": 0,
+        "material": "reused_packaged_material",
+        "material_slot": 3,
+        "semantic_part": "reused_packaged_homogeneous_material",
+        "simulation_model": "rigid"
+      },
+      {
+        "body_id": 0,
+        "material": "reused_packaged_material",
+        "material_slot": 4,
+        "semantic_part": "reused_packaged_homogeneous_material",
+        "simulation_model": "rigid"
+      },
+      {
+        "body_id": 0,
+        "material": "reused_packaged_material",
+        "material_slot": 5,
+        "semantic_part": "reused_packaged_homogeneous_material",
+        "simulation_model": "rigid"
+      },
+      {
+        "body_id": 0,
+        "material": "reused_packaged_material",
+        "material_slot": 6,
+        "semantic_part": "reused_packaged_homogeneous_material",
+        "simulation_model": "rigid"
+      },
+      {
+        "body_id": 0,
+        "material": "reused_packaged_material",
+        "material_slot": 7,
+        "semantic_part": "reused_packaged_homogeneous_material",
+        "simulation_model": "rigid"
+      },
+      {
+        "body_id": 0,
+        "material": "reused_packaged_material",
+        "material_slot": 8,
+        "semantic_part": "reused_packaged_homogeneous_material",
+        "simulation_model": "rigid"
+      },
+      {
+        "body_id": 0,
+        "material": "reused_packaged_material",
+        "material_slot": 9,
+        "semantic_part": "reused_packaged_homogeneous_material",
+        "simulation_model": "rigid"
+      },
+      {
+        "body_id": 0,
+        "material": "reused_packaged_material",
+        "material_slot": 10,
+        "semantic_part": "reused_packaged_homogeneous_material",
+        "simulation_model": "rigid"
+      }
+    ],
+    "vlm_response": "/Users/yushanxie/workspace/cgvi/term3/coderepos/DINO_VLM_sim_dataset_gen/v41_velocity_pilot/prepared/objects/161967f1a4b7463389fa7546ef4907b2/inference/vlm/response.json",
+    "vlm_response_sha256": "e40a2081e2b42c7549f1e3b10329dc1d3a9b148e7f624909df1bf8e2782109ce"
+  }
+}

@@ -1,0 +1,177 @@
+{
+  "arrays": {
+    "dino_features": {
+      "dtype": "float16",
+      "shape": [
+        2048,
+        384
+      ]
+    },
+    "dino_valid": {
+      "dtype": "bool",
+      "shape": [
+        2048
+      ]
+    },
+    "point_active": {
+      "dtype": "bool",
+      "shape": [
+        61,
+        2048
+      ]
+    },
+    "point_material_ids": {
+      "dtype": "int32",
+      "shape": [
+        2048
+      ]
+    },
+    "trajectory_positions_m": {
+      "dtype": "float32",
+      "shape": [
+        61,
+        2048,
+        3
+      ]
+    }
+  },
+  "coordinate_system": {
+    "floor_z_m": 0.0,
+    "frame": "right-handed Blender XYZ",
+    "initial_drop_height_m": 0.1,
+    "normalization_cube_size_m": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "units": "metres",
+    "up_axis": "+Z"
+  },
+  "dino": {
+    "feature_dimension": 384,
+    "feature_dtype": "float16",
+    "model": "facebook/dinov2-small",
+    "valid_point_count": 1890
+  },
+  "force": {
+    "force_fields": [],
+    "gravity_m_s2": [
+      0.0,
+      0.0,
+      -9.81
+    ]
+  },
+  "images": {
+    "back": "images/back.webp",
+    "front": "images/front.webp",
+    "left": "images/left.webp",
+    "right": "images/right.webp"
+  },
+  "index_record": {
+    "duration_s": 2.0,
+    "frame_count": 61,
+    "metadata": "objects/1ae3077f108d4775afab873f99b2c44b/metadata.json",
+    "minimum_vlm_confidence": 0.8399999737739563,
+    "point_count": 2048,
+    "sample": "objects/1ae3077f108d4775afab873f99b2c44b/sample.npz",
+    "solver_route": "soft_body",
+    "uid": "1ae3077f108d4775afab873f99b2c44b"
+  },
+  "packaging": {
+    "created_at_utc": "2026-07-24T14:40:31.986833+00:00",
+    "min_vlm_confidence": 0.4,
+    "sample_sha256": "da4f56ff358ab549cb209f73bcdab4772f2d764002b21ab553f8d7a0120f3180",
+    "source_attribution": {
+      "localPath": "/Users/yushanxie/workspace/cgvi/term3/coderepos/DINO_VLM_sim_dataset_gen/data/hf-objaverse-v1/glbs/1ae/1ae3077f108d4775afab873f99b2c44b.glb",
+      "name": "Pillow01",
+      "source": "unknown",
+      "uid": "1ae3077f108d4775afab873f99b2c44b"
+    }
+  },
+  "row_contract": "For point row i, trajectory_positions_m[:,i], dino_features[i], dino_valid[i], and point_material_ids[i] refer to the same persistent point. trajectory_positions_m[0] is the rest point cloud.",
+  "schema_version": 1,
+  "simulation": {
+    "body_parameters": [
+      {
+        "damping": 0.12,
+        "density_kg_m3": 180.0,
+        "friction": 0.65,
+        "method": "sample_count_weighted_vlm_material_slots",
+        "poisson_ratio": 0.35,
+        "restitution": 0.05,
+        "youngs_modulus_pa": 50000.0
+      }
+    ],
+    "point_trajectory_semantics": "Persistent rest-surface points",
+    "solver_engine": "Blender Soft Body",
+    "solver_parameter_mapping": {
+      "per_body_solver_mapping": [
+        {
+          "blender_bend": 2.8316166400909424,
+          "blender_damping": 0.11999999731779099,
+          "blender_mass": 0.05485151708126068,
+          "blender_medium_friction": 0.0,
+          "blender_pull": 0.2831616699695587,
+          "blender_push": 0.2831616699695587,
+          "blender_shear": 0.2831616699695587,
+          "estimated_si_mass_kg_from_bbox": 54.85151767730713,
+          "initial_proxy_triangle_count": 1280,
+          "mapping": "Young's modulus is mapped logarithmically to Blender's normalized edge-spring stiffness. The estimated SI mass is density times bounding-box volume, then normalized by 1000 kg per Blender mass unit for solver stability. Poisson ratio and restitution are retained but Blender Soft Body has no direct matching controls. This is a deterministic Blender Soft Body simulation, not calibrated FEM.",
+          "maximum_projection_distance_m": 0.16805288195610046,
+          "mean_projection_distance_m": 0.0375824049115181,
+          "physics_geometry": "regular_bounding_ellipsoid_with_interpolated_displacement",
+          "proxy_shape": "regular_bounding_ellipsoid",
+          "proxy_subdivisions": 4,
+          "proxy_triangle_count": 1280,
+          "retained_but_not_mapped": [
+            "restitution",
+            "poisson_ratio"
+          ],
+          "saved_point_policy": "Original rest point plus barycentrically interpolated proxy displacement",
+          "soft_body_damping_scale": 1.0,
+          "soft_body_gravity_scale": 0.275,
+          "soft_body_mass_scale": 0.001,
+          "soft_body_medium_friction_scale": 0.0,
+          "source_triangle_count": 1986,
+          "used_vlm_parameters": [
+            "density_kg_m3",
+            "friction",
+            "youngs_modulus_pa",
+            "damping"
+          ]
+        }
+      ]
+    },
+    "solver_route": "soft_body"
+  },
+  "time": {
+    "duration_s": 2.0,
+    "frame_count": 61,
+    "frame_time": "start_s + frame_index * time_step_s",
+    "saved_fps": 30.00000178813945,
+    "start_s": 0.0,
+    "time_step_s": 0.03333333134651184
+  },
+  "uid": "1ae3077f108d4775afab873f99b2c44b",
+  "vlm": {
+    "local_repairs": [],
+    "materials": [
+      {
+        "confidence": 0.84,
+        "material_category": "cloth_fabric",
+        "material_id": 0,
+        "material_type": "soft_solid",
+        "parameters": {},
+        "semantic_part": "outer pillow cover / shell",
+        "simulation_model": "soft_body",
+        "solver_model": "blender_soft_body_mass_spring"
+      }
+    ],
+    "model": "gpt-5.4-mini-2026-03-17",
+    "object_summary": "A single pillow-like cushion with a pale fabric surface and gold-trimmed edges. The shape and wrinkling suggest a deformable filled textile object rather than a rigid prop.",
+    "warnings": [
+      "Appearance is somewhat ambiguous between a stuffed pillow and a thin cloth cushion; the chosen soft_body model is a cautious visual prior.",
+      "Material slot 0 appears to be the only observable surface material; no other slots are present in the metadata."
+    ]
+  }
+}

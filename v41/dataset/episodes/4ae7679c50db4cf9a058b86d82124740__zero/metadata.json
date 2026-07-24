@@ -1,0 +1,18 @@
+{
+  "dt_s": 0.033333333,
+  "episode_id": "4ae7679c50db4cf9a058b86d82124740__zero",
+  "family": "rigid",
+  "gravity_m_s2": [
+    0.0,
+    0.0,
+    -9.81
+  ],
+  "initial_linear_velocity_m_s": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "scene_layout_id": "floor_only",
+  "trajectory_provenance": "v4_packaged_balanced_90",
+  "uid": "4ae7679c50db4cf9a058b86d82124740"
+}

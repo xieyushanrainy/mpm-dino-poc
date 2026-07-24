@@ -1,0 +1,24 @@
+{
+  "calibration": {
+    "soft_body_damping_scale": 1.0,
+    "soft_body_gravity_scale": 0.275,
+    "soft_body_mass_scale": 0.001,
+    "soft_body_medium_friction_scale": 0.0
+  },
+  "dt_s": 0.03333333333333333,
+  "episode_id": "db01c9486b1d4590ab7d31836b1df4d9__soft_free_fall_zero",
+  "family": "soft_body",
+  "gravity_m_s2": [
+    0.0,
+    0.0,
+    -9.81
+  ],
+  "initial_linear_velocity_m_s": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "scene_layout_id": "floor_only",
+  "trajectory_provenance": "packaged_soft_30_calibrated",
+  "uid": "db01c9486b1d4590ab7d31836b1df4d9"
+}

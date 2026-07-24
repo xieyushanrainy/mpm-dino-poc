@@ -1,0 +1,182 @@
+{
+  "arrays": {
+    "dino_features": {
+      "dtype": "float16",
+      "shape": [
+        2048,
+        384
+      ]
+    },
+    "dino_valid": {
+      "dtype": "bool",
+      "shape": [
+        2048
+      ]
+    },
+    "point_active": {
+      "dtype": "bool",
+      "shape": [
+        61,
+        2048
+      ]
+    },
+    "point_material_ids": {
+      "dtype": "int32",
+      "shape": [
+        2048
+      ]
+    },
+    "trajectory_positions_m": {
+      "dtype": "float32",
+      "shape": [
+        61,
+        2048,
+        3
+      ]
+    }
+  },
+  "coordinate_system": {
+    "floor_z_m": 0.0,
+    "frame": "right-handed Blender XYZ",
+    "initial_drop_height_m": 0.1,
+    "normalization_cube_size_m": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "units": "metres",
+    "up_axis": "+Z"
+  },
+  "dino": {
+    "feature_dimension": 384,
+    "feature_dtype": "float16",
+    "model": "facebook/dinov2-small",
+    "valid_point_count": 2028
+  },
+  "force": {
+    "force_fields": [],
+    "gravity_m_s2": [
+      0.0,
+      0.0,
+      -9.81
+    ]
+  },
+  "images": {
+    "back": "images/back.webp",
+    "front": "images/front.webp",
+    "left": "images/left.webp",
+    "right": "images/right.webp"
+  },
+  "index_record": {
+    "duration_s": 2.0,
+    "frame_count": 61,
+    "metadata": "objects/05196def5f47450485114405ab874926/metadata.json",
+    "minimum_vlm_confidence": 0.95,
+    "point_count": 2048,
+    "sample": "objects/05196def5f47450485114405ab874926/sample.npz",
+    "solver_route": "rigid",
+    "uid": "05196def5f47450485114405ab874926"
+  },
+  "packaging": {
+    "balanced_assembly": {
+      "selected_route": "rigid",
+      "selection_material_category": "plant",
+      "source_package": "packaged_dataset_1k",
+      "source_uid": "05196def5f47450485114405ab874926"
+    },
+    "min_vlm_confidence": 0.4,
+    "require_no_vlm_repairs": false,
+    "source_fingerprint_sha256": "e483d418ccce5bcb26fd33849ce05e5925c944040f3f4b4cb601eed22d764fa0"
+  },
+  "row_contract": "For point row i, trajectory_positions_m[:,i], dino_features[i], dino_valid[i], and point_material_ids[i] refer to the same persistent point. trajectory_positions_m[0] is the rest point cloud.",
+  "schema_version": 1,
+  "simulation": {
+    "body_parameters": [
+      {
+        "density_kg_m3": 456.93359375,
+        "friction": 0.5,
+        "method": "sample_count_weighted_vlm_material_slots",
+        "restitution": 0.7
+      }
+    ],
+    "point_trajectory_semantics": "Persistent rest-surface points",
+    "solver_engine": "Blender Bullet",
+    "solver_parameter_mapping": {
+      "mapping": "VLM density/contact values are used directly by Blender Bullet."
+    },
+    "solver_route": "rigid"
+  },
+  "time": {
+    "duration_s": 2.0,
+    "frame_count": 61,
+    "frame_time": "start_s + frame_index * time_step_s",
+    "saved_fps": 30.0,
+    "start_s": 0.0,
+    "time_step_s": 0.033333333
+  },
+  "uid": "05196def5f47450485114405ab874926",
+  "vlm": {
+    "local_repairs": [],
+    "materials": [
+      {
+        "confidence": 0.95,
+        "material_category": "plant",
+        "material_id": 0,
+        "material_type": "rigid",
+        "parameters": {
+          "density_kg_m3": 500.0,
+          "friction": 0.5,
+          "restitution": 0.7
+        },
+        "semantic_part": "tree stump",
+        "simulation_model": "rigid",
+        "solver_model": "rigid_body"
+      },
+      {
+        "confidence": 0.95,
+        "material_category": "snow_ice",
+        "material_id": 1,
+        "material_type": "rigid",
+        "parameters": {
+          "density_kg_m3": 500.0,
+          "friction": 0.5,
+          "restitution": 0.7
+        },
+        "semantic_part": "snow",
+        "simulation_model": "rigid",
+        "solver_model": "rigid_body"
+      },
+      {
+        "confidence": 0.95,
+        "material_category": "sand_soil",
+        "material_id": 2,
+        "material_type": "rigid",
+        "parameters": {
+          "density_kg_m3": 150.0,
+          "friction": 0.5,
+          "restitution": 0.7
+        },
+        "semantic_part": "ground",
+        "simulation_model": "rigid",
+        "solver_model": "rigid_body"
+      },
+      {
+        "confidence": 0.95,
+        "material_category": "snow_ice",
+        "material_id": 3,
+        "material_type": "rigid",
+        "parameters": {
+          "density_kg_m3": 500.0,
+          "friction": 0.5,
+          "restitution": 0.7
+        },
+        "semantic_part": "snow",
+        "simulation_model": "rigid",
+        "solver_model": "rigid_body"
+      }
+    ],
+    "model": "Qwen/Qwen3-VL-2B-Instruct",
+    "object_summary": "a tree stump with snow on the ground",
+    "warnings": []
+  }
+}

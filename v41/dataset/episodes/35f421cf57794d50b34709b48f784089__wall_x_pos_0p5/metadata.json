@@ -1,0 +1,125 @@
+{
+  "action": {
+    "colliders": [
+      {
+        "center_m": [
+          0.65,
+          0.0,
+          0.5
+        ],
+        "collider_id": "wall_0",
+        "friction": 0.5,
+        "half_extents_m": [
+          0.025,
+          0.75,
+          0.5
+        ],
+        "restitution": 0.1,
+        "rotation_xyzw": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "type": "box"
+      }
+    ],
+    "config_path": "/Users/yushanxie/workspace/cgvi/term3/coderepos/DINO_VLM_sim_dataset_gen/configs/action_wall_x_pos.json",
+    "force_fields": [],
+    "gravity_m_s2": [
+      0.0,
+      0.0,
+      -9.81
+    ],
+    "initial_linear_velocity_m_s": [
+      0.5,
+      0.0,
+      0.0
+    ]
+  },
+  "action_config": "/Users/yushanxie/workspace/cgvi/term3/coderepos/DINO_VLM_sim_dataset_gen/configs/action_wall_x_pos.json",
+  "action_config_sha256": "33eddfd612d077fed689d2f51a239ae9c3b1077019ed2fc8075370fad2c9db6b",
+  "asset_dir": "/Users/yushanxie/workspace/cgvi/term3/coderepos/DINO_VLM_sim_dataset_gen/v41_velocity_pilot/prepared/objects/35f421cf57794d50b34709b48f784089",
+  "body_parameters": [
+    {
+      "density_kg_m3": 2000.0,
+      "friction": 0.0,
+      "method": "sample_count_weighted_vlm_material_slots",
+      "restitution": 0.0
+    }
+  ],
+  "duration_s": 2.0,
+  "episode_id": "35f421cf57794d50b34709b48f784089__wall_x_pos_0p5",
+  "fluid_resolution": null,
+  "fluid_velocity_scale": null,
+  "is_real_selected_solver_output": true,
+  "limitations": "VLM material values are visual priors. Blender Soft Body and Mantaflow controls are not calibrated SI material models. Mixed-route assets are rejected instead of silently collapsing them to one solver.",
+  "object_path": "/Users/yushanxie/workspace/cgvi/term3/coderepos/DINO_VLM_sim_dataset_gen/data/hf-objaverse-v1/glbs/35f/35f421cf57794d50b34709b48f784089.glb",
+  "point_trajectory_semantics": "Persistent rest-surface points",
+  "points_and_views_sha256": "bb06a70ef15c2845a9b805e6ba47f70f74b55d75221150cb0e16668da5890f67",
+  "quality_control": {
+    "active_fraction": 1.0,
+    "colliders": [
+      {
+        "collider_id": "wall_0",
+        "first_contact_frame": 10,
+        "maximum_penetrating_point_fraction": 0.0087890625,
+        "maximum_penetration_depth_m": 0.024970650672912577,
+        "minimum_signed_distance_m": -0.024970650672912577
+      }
+    ],
+    "final_mean_point_displacement_m": 0.2329099178314209,
+    "inferred_initial_linear_velocity_m_s": [
+      0.5000003576278687,
+      0.0,
+      1.3125482946629852e-05
+    ],
+    "initial_linear_velocity_error_m_s": 1.3130354156484427e-05,
+    "initial_linear_velocity_tolerance_m_s": 0.02,
+    "initial_point_error_m": 0.0,
+    "maximum_point_displacement_m": 0.25270646810531616,
+    "requested_initial_linear_velocity_m_s": [
+      0.5,
+      0.0,
+      0.0
+    ]
+  },
+  "resolved_force_fields": [],
+  "rest_geometry_verification_max_error_m": 0.0,
+  "save_fps": 30,
+  "schema_version": 1,
+  "simulation_fps": 60,
+  "soft_body_max_triangles": null,
+  "solver_body_metadata": [
+    {
+      "body_id": 0,
+      "collision_shape": "CONVEX_HULL",
+      "density_kg_m3": 2000.0,
+      "friction": 0.0,
+      "mass_kg": 54.97815549665512,
+      "mass_volume_m3": 0.02748907774832756,
+      "material_proxy_method": "sample_count_weighted_vlm_material_slots",
+      "mesh_volume_m3": 0.02748907774832756,
+      "name": "body_000_asset",
+      "restitution": 0.0
+    }
+  ],
+  "solver_engine": "Blender Bullet",
+  "solver_parameter_mapping": {
+    "mapping": "VLM density/contact values are used directly by Blender Bullet."
+  },
+  "solver_route": "rigid",
+  "trajectory_provenance": "v41_collider_pilot",
+  "uid": "35f421cf57794d50b34709b48f784089",
+  "used_material_slots": [
+    {
+      "body_id": 0,
+      "material": "reused_packaged_material",
+      "material_slot": 0,
+      "semantic_part": "reused_packaged_homogeneous_material",
+      "simulation_model": "rigid"
+    }
+  ],
+  "vlm_response": "/Users/yushanxie/workspace/cgvi/term3/coderepos/DINO_VLM_sim_dataset_gen/v41_velocity_pilot/prepared/objects/35f421cf57794d50b34709b48f784089/inference/vlm/response.json",
+  "vlm_response_sha256": "b130de1d679738d5bdb767ab9cd53c2481d7b80c68803836cbc919223805978a"
+}

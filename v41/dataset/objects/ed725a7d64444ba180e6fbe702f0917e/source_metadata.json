@@ -1,0 +1,178 @@
+{
+  "arrays": {
+    "dino_features": {
+      "dtype": "float16",
+      "shape": [
+        2048,
+        384
+      ]
+    },
+    "dino_valid": {
+      "dtype": "bool",
+      "shape": [
+        2048
+      ]
+    },
+    "point_active": {
+      "dtype": "bool",
+      "shape": [
+        61,
+        2048
+      ]
+    },
+    "point_material_ids": {
+      "dtype": "int32",
+      "shape": [
+        2048
+      ]
+    },
+    "trajectory_positions_m": {
+      "dtype": "float32",
+      "shape": [
+        61,
+        2048,
+        3
+      ]
+    }
+  },
+  "coordinate_system": {
+    "floor_z_m": 0.0,
+    "frame": "right-handed Blender XYZ",
+    "initial_drop_height_m": 0.1,
+    "normalization_cube_size_m": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "units": "metres",
+    "up_axis": "+Z"
+  },
+  "dino": {
+    "feature_dimension": 384,
+    "feature_dtype": "float16",
+    "model": "facebook/dinov2-small",
+    "valid_point_count": 1841
+  },
+  "force": {
+    "force_fields": [],
+    "gravity_m_s2": [
+      0.0,
+      0.0,
+      -9.81
+    ]
+  },
+  "images": {
+    "back": "images/back.webp",
+    "front": "images/front.webp",
+    "left": "images/left.webp",
+    "right": "images/right.webp"
+  },
+  "index_record": {
+    "duration_s": 2.0,
+    "frame_count": 61,
+    "metadata": "objects/ed725a7d64444ba180e6fbe702f0917e/metadata.json",
+    "minimum_vlm_confidence": 0.6800000071525574,
+    "point_count": 2048,
+    "sample": "objects/ed725a7d64444ba180e6fbe702f0917e/sample.npz",
+    "solver_route": "soft_body",
+    "uid": "ed725a7d64444ba180e6fbe702f0917e"
+  },
+  "packaging": {
+    "created_at_utc": "2026-07-24T14:40:35.321900+00:00",
+    "min_vlm_confidence": 0.4,
+    "sample_sha256": "365f2cc6b09479cc1ff7fb580c1a20d7722f7d8def78b8a9df6c01819fc82e6c",
+    "source_attribution": {
+      "localPath": "/Users/yushanxie/workspace/cgvi/term3/coderepos/DINO_VLM_sim_dataset_gen/data/hf-objaverse-v1/glbs/ed7/ed725a7d64444ba180e6fbe702f0917e.glb",
+      "name": "Teddy",
+      "source": "unknown",
+      "uid": "ed725a7d64444ba180e6fbe702f0917e"
+    }
+  },
+  "row_contract": "For point row i, trajectory_positions_m[:,i], dino_features[i], dino_valid[i], and point_material_ids[i] refer to the same persistent point. trajectory_positions_m[0] is the rest point cloud.",
+  "schema_version": 1,
+  "simulation": {
+    "body_parameters": [
+      {
+        "damping": 0.22,
+        "density_kg_m3": 260.0,
+        "friction": 0.85,
+        "method": "sample_count_weighted_vlm_material_slots",
+        "poisson_ratio": 0.35,
+        "restitution": 0.08,
+        "youngs_modulus_pa": 50000.0
+      }
+    ],
+    "point_trajectory_semantics": "Persistent rest-surface points",
+    "solver_engine": "Blender Soft Body",
+    "solver_parameter_mapping": {
+      "per_body_solver_mapping": [
+        {
+          "blender_bend": 2.8316166400909424,
+          "blender_damping": 0.2199999988079071,
+          "blender_mass": 0.17847183346748352,
+          "blender_medium_friction": 0.0,
+          "blender_pull": 0.2831616699695587,
+          "blender_push": 0.2831616699695587,
+          "blender_shear": 0.2831616699695587,
+          "estimated_si_mass_kg_from_bbox": 178.4718406200409,
+          "initial_proxy_triangle_count": 1280,
+          "mapping": "Young's modulus is mapped logarithmically to Blender's normalized edge-spring stiffness. The estimated SI mass is density times bounding-box volume, then normalized by 1000 kg per Blender mass unit for solver stability. Poisson ratio and restitution are retained but Blender Soft Body has no direct matching controls. This is a deterministic Blender Soft Body simulation, not calibrated FEM.",
+          "maximum_projection_distance_m": 0.3174359202384949,
+          "mean_projection_distance_m": 0.11875204741954803,
+          "physics_geometry": "regular_bounding_ellipsoid_with_interpolated_displacement",
+          "proxy_shape": "regular_bounding_ellipsoid",
+          "proxy_subdivisions": 4,
+          "proxy_triangle_count": 1280,
+          "retained_but_not_mapped": [
+            "restitution",
+            "poisson_ratio"
+          ],
+          "saved_point_policy": "Original rest point plus barycentrically interpolated proxy displacement",
+          "soft_body_damping_scale": 1.0,
+          "soft_body_gravity_scale": 0.275,
+          "soft_body_mass_scale": 0.001,
+          "soft_body_medium_friction_scale": 0.0,
+          "source_triangle_count": 369428,
+          "used_vlm_parameters": [
+            "density_kg_m3",
+            "friction",
+            "youngs_modulus_pa",
+            "damping"
+          ]
+        }
+      ]
+    },
+    "solver_route": "soft_body"
+  },
+  "time": {
+    "duration_s": 2.0,
+    "frame_count": 61,
+    "frame_time": "start_s + frame_index * time_step_s",
+    "saved_fps": 30.00000178813945,
+    "start_s": 0.0,
+    "time_step_s": 0.03333333134651184
+  },
+  "uid": "ed725a7d64444ba180e6fbe702f0917e",
+  "vlm": {
+    "local_repairs": [],
+    "materials": [
+      {
+        "confidence": 0.68,
+        "material_category": "cloth_fabric",
+        "material_id": 0,
+        "material_type": "soft_solid",
+        "parameters": {},
+        "semantic_part": "main plush/fabric body and attached visible surfaces",
+        "simulation_model": "soft_body",
+        "solver_model": "blender_soft_body_mass_spring"
+      }
+    ],
+    "model": "gpt-5.4-mini-2026-03-17",
+    "object_summary": "A plush/stuffed-animal-like figure with a light-colored base or backing plane, seen as one assembled asset made from several imported mesh candidates. The dominant visible material is a matte fabric/plush surface; the base looks flatter and more rigid. Visual evidence is ambiguous enough that this should be treated as a cautious prior rather than ground truth.",
+    "warnings": [
+      "The asset appears to combine a soft plush figure and a flatter support/base in one body, so the single material model is only an approximation.",
+      "Component colors indicate multiple imported candidates, but no strong evidence supports splitting them into separate simulated bodies here.",
+      "Appearance-based material inference is uncertain because the PBR metadata is sparse and the view-based surface detail is noisy/partially ambiguous."
+    ]
+  }
+}
