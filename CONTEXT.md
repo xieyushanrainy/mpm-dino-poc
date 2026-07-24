@@ -1,8 +1,62 @@
-> Project status, 2026-07-04: V1 is concluded. See
-> [`docs/v1/CONCLUSION.md`](docs/v1/CONCLUSION.md) and
-> [`V2_CONTEXT.md`](V2_CONTEXT.md) before beginning V2 work.
+> Project status, 2026-07-22: V1-V3 are concluded as context for the new V4
+> dataset/architecture investigation. Read [`v4/CONTEXT.md`](v4/CONTEXT.md)
+> before beginning V4 work. It consolidates the prior findings, audits the
+> force-free dataset, and defines architecture-neutral V4 analysis tracks.
 
 ## Papers and Datasets
+
+### V4 force-free Objaverse point-physics dataset
+
+V4 uses the locally packaged dataset at
+[`v4/dataset/packaged_dataset_1k/`](v4/dataset/packaged_dataset_1k/), generated
+by [`DINO_VLM_sim_dataset_gen`](../coderepos/DINO_VLM_sim_dataset_gen/). The
+current snapshot contains 632 validated, row-aligned samples with 61 frames,
+2,048 persistent surface points, 384-D DINOv2-small features, four rendered
+views, per-point VLM material IDs and a time-varying active-point mask. All
+samples have gravity and no applied force field; the solver routes are 601
+rigid, 30 fluid and 1 soft body.
+
+"No applied force" removes the controller/action confound from V1-V3, but does
+not make motion a function of material alone. Geometry, a 0.1 m initial drop,
+gravity, floor contact, friction/restitution, solver choice and numerical
+settings remain causal. The strong route imbalance and VLM-derived labels must
+be handled explicitly in splits, baselines and claims.
+
+See [`v4/CONTEXT.md`](v4/CONTEXT.md) for the verified schema, code entry points,
+risks, candidate analysis tracks, ablations, metrics and V4 acceptance criteria.
+
+### PhysiFormer
+
+**Paper:** *PhysiFormer: Learning to Simulate Mechanics in World Space*
+
+**Authors:** Yiming Chen, Yushi Lan, Andrea Vedaldi
+
+**Year:** 2026
+
+**arXiv:** 2606.27364
+
+**Local PDF:** [physformer.pdf](../mpmpapers/physformer.pdf)
+
+**Local repository:** [PhysiFormer](../coderepos/PhysiFormer/)
+
+**Commit inspected:** `f7cb285fe612266f50290f8411da4ec2650834df`
+
+PhysiFormer is an additional architecture reference for the overall MPM-DINO
+POC; it is not the prescribed foundation for V4. It predicts a complete
+world-coordinate vertex trajectory with a flow-matching diffusion transformer,
+using factorized spatial, temporal and object attention, coordinate/time RoPE,
+register tokens and initial-state/material conditioning. Its one-shot
+full-trajectory formulation provides a useful comparison with the recurrent
+V1-V3 family because it avoids autoregressive exposure bias and error
+accumulation.
+
+Potentially reusable ideas include full-trajectory prediction, separate spatial
+and temporal attention, coordinate RoPE, initial-state clamping, frame-aware
+masks and stochastic trajectory evaluation. Direct reuse is not assumed: V4
+contains single-object surface point clouds without mesh topology, and dense
+spatial attention over 2,048 points for 61 frames is costly. V3 graph and
+object-latent architectures remain first-class analysis candidates alongside
+any PhysiFormer-inspired experiment.
 
 ### PhysCtrl
 
