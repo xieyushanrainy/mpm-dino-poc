@@ -9,7 +9,7 @@ from torch.utils.checkpoint import checkpoint
 
 from mpm_dino_v2.deformation import edge_validity, gather_neighbours
 from .full_data import ballistic_trajectory
-from .full_model import FullTrajectoryOutput
+from .full_model import FullTrajectoryOutput, FullTrajectorySurrogate
 from .model import GraphLayer, masked_mean
 
 
@@ -205,3 +205,62 @@ class V41TrajectorySurrogate(nn.Module):
         residual_local=(raw-masked_mean(raw,input_mask[:,None].expand(-1,self.frames,-1),2)[:,:,None])*input_mask[:,None,:,None]
         residual=(residual_com[:,:,None]+residual_local)*input_mask[:,None,:,None]
         return FullTrajectoryOutput(residual_com,residual_local,residual,ballistic,ballistic+residual)
+
+
+class V41PooledTrackBSurrogate(FullTrajectorySurrogate):
+    """Exact V4 Track B pooled-DINO/FiLM model with the V4.1 input contract.
+
+    The original architecture does not consume the explicit reference tensor.
+    It remains in the shared V4.1 loader/model contract for graph construction,
+    normalization, and metrics, and is deliberately ignored here.
+    """
+
+    mechanism = "track_b_pooled"
+
+    def forward(
+        self, x0, x1, input_mask, reference, dino, dino_valid, dt, gravity,
+        floor_z, neighbour_indices, neighbour_mask, rest_edge_vectors,
+        rest_edge_lengths,
+    ):
+        del reference
+        return super().forward(
+            x0=x0,
+            x1=x1,
+            input_mask=input_mask,
+            dino=dino,
+            dino_valid=dino_valid,
+            dt=dt,
+            gravity=gravity,
+            floor_z=floor_z,
+            neighbour_indices=neighbour_indices,
+            neighbour_mask=neighbour_mask,
+            rest_edge_vectors=rest_edge_vectors,
+            rest_edge_lengths=rest_edge_lengths,
+        )
+
+
+def build_v41_model(
+    mechanism="m1", hidden_dim=128, blocks=4, heads=4, dropout=0.1,
+    frames=59, gradient_checkpointing=True,
+):
+    """Build a reviewed V4.1 mechanism or the exact pooled V4 Track B bridge."""
+    if mechanism == "track_b_pooled":
+        return V41PooledTrackBSurrogate(
+            dino_dim=384,
+            dino_embed_dim=16,
+            hidden_dim=hidden_dim,
+            blocks=blocks,
+            heads=heads,
+            dropout=dropout,
+            frames=frames,
+            gradient_checkpointing=gradient_checkpointing,
+        )
+    return V41TrajectorySurrogate(
+        mechanism=mechanism,
+        hidden_dim=hidden_dim,
+        blocks=blocks,
+        heads=heads,
+        dropout=dropout,
+        frames=frames,
+        gradient_checkpointing=gradient_checkpointing,
+    )

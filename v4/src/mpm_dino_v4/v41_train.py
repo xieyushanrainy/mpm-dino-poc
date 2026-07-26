@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 
 from .full_losses import compute_full_trajectory_loss
 from .v41_data import MODEL_INPUT_KEYS, UIDBalancedSampler, V41TrajectoryDataset
-from .v41_model import V41TrajectorySurrogate
+from .v41_model import build_v41_model
 
 
 def seed_all(seed):
@@ -122,7 +122,10 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
     train_sampler = UIDBalancedSampler(train_ds, draws_per_epoch, seed)
     train_loader = DataLoader(train_ds, batch_size=1, sampler=train_sampler, num_workers=0)
     val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=0)
-    model = V41TrajectorySurrogate(mechanism, hidden_dim=hidden_dim, blocks=blocks, heads=heads, dropout=dropout).to(device)
+    model = build_v41_model(
+        mechanism, hidden_dim=hidden_dim, blocks=blocks, heads=heads,
+        dropout=dropout,
+    ).to(device)
     starting_trunk = None
     if mechanism == "m6" and stage1_checkpoint:
         state = torch.load(stage1_checkpoint, map_location="cpu", weights_only=False)
@@ -157,6 +160,20 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
         "zero_reference": str(zero_reference) if zero_reference else None,
         "amp": use_amp, "resume": resume,
         "plateau_patience": plateau_patience,
+        "loss": {
+            "implementation": "compute_full_trajectory_loss",
+            "weights": {
+                "residual": 1.0, "position": 1.0, "com": 0.5,
+                "edge_vector": 0.25, "edge_length": 0.1,
+                "key_horizons": 0.25,
+            },
+            "key_horizon_indices": [3, 7, 15, 58],
+        },
+        "architecture_contract": (
+            "exact_v4_track_b_pooled_dino_film"
+            if mechanism == "track_b_pooled"
+            else "v41_correspondence_preserving"
+        ),
     }
     (output/"config.json").write_text(json.dumps(config, indent=2)+"\n")
     best, stale, start_epoch, seen_eligible = float("inf"), 0, 1, zero_h1 is None
@@ -234,7 +251,10 @@ def benchmark_v41(root, manifest, mechanism, device="mps", hidden_dim=128, block
     seed_all(42)
     ds=V41TrajectoryDataset(root,manifest,"train","real",42)
     batch=move(next(iter(DataLoader(ds,batch_size=1))),torch.device(device))
-    model=V41TrajectorySurrogate(mechanism,hidden_dim=hidden_dim,blocks=blocks,heads=heads,dropout=.1).to(device).train()
+    model=build_v41_model(
+        mechanism, hidden_dim=hidden_dim, blocks=blocks, heads=heads,
+        dropout=.1,
+    ).to(device).train()
     if device=="mps": torch.mps.empty_cache()
     started=time.perf_counter()
     output=model(**{k:batch[k] for k in MODEL_INPUT_KEYS})

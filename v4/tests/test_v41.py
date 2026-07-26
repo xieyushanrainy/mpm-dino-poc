@@ -7,11 +7,15 @@ import torch
 
 from mpm_dino_v2.graph import build_mutual_knn_graph
 from mpm_dino_v4.model import masked_mean
+from mpm_dino_v4.full_model import FullTrajectorySurrogate
 from mpm_dino_v4.v41_data import (
     FORBIDDEN_INPUT_KEYS, MODEL_INPUT_KEYS, UIDBalancedSampler,
     V41TrajectoryDataset, validate_v41_manifest,
 )
-from mpm_dino_v4.v41_model import M1Fusion, M2LocalMemory, V41TrajectorySurrogate
+from mpm_dino_v4.v41_model import (
+    M1Fusion, M2LocalMemory, V41PooledTrackBSurrogate,
+    V41TrajectorySurrogate, build_v41_model,
+)
 
 
 def inputs(n=12, frames=5):
@@ -110,3 +114,48 @@ def test_m6_trunk_bytes_identical_before_stage2():
             h.update(key.encode()); h.update(value.detach().cpu().numpy().tobytes())
         return h.hexdigest()
     assert digest(real) == digest(zero)
+
+
+def test_pooled_track_b_adapter_is_exact_old_architecture():
+    torch.manual_seed(17)
+    original = FullTrajectorySurrogate(
+        hidden_dim=32, blocks=1, heads=4, dropout=0, frames=5,
+        gradient_checkpointing=False,
+    ).eval()
+    torch.manual_seed(17)
+    adapted = V41PooledTrackBSurrogate(
+        hidden_dim=32, blocks=1, heads=4, dropout=0, frames=5,
+        gradient_checkpointing=False,
+    ).eval()
+    assert original.state_dict().keys() == adapted.state_dict().keys()
+    for key in original.state_dict():
+        assert torch.equal(original.state_dict()[key], adapted.state_dict()[key])
+
+    x = inputs(frames=5)
+    old_inputs = {key: value for key, value in x.items() if key != "reference"}
+    with torch.no_grad():
+        expected = original(**old_inputs).position
+        actual = adapted(**x).position
+    assert torch.equal(expected, actual)
+
+
+def test_pooled_track_b_zero_control_keeps_full_architecture_and_validity():
+    x = inputs(frames=5)
+    valid = x["dino_valid"].clone()
+    x["dino"].zero_()
+    torch.manual_seed(23)
+    zero = build_v41_model(
+        "track_b_pooled", hidden_dim=32, blocks=1, heads=4, dropout=0,
+        frames=5, gradient_checkpointing=False,
+    ).eval()
+    torch.manual_seed(23)
+    real_receiving_zero = build_v41_model(
+        "track_b_pooled", hidden_dim=32, blocks=1, heads=4, dropout=0,
+        frames=5, gradient_checkpointing=False,
+    ).eval()
+    with torch.no_grad():
+        first = zero(**x).position
+        second = real_receiving_zero(**x).position
+    assert torch.equal(x["dino_valid"], valid)
+    assert torch.equal(first, second)
+    assert torch.isfinite(first).all()

@@ -10,14 +10,16 @@ from torch.utils.data import DataLoader
 
 from .metrics import metric_values
 from .v41_data import MODEL_INPUT_KEYS, V41TrajectoryDataset
-from .v41_model import V41TrajectorySurrogate
+from .v41_model import build_v41_model
 from .v41_train import move
 
 
 def load_model(path, device):
     state=torch.load(path,map_location="cpu",weights_only=False); c=state["config"]
-    model=V41TrajectorySurrogate(c["mechanism"],hidden_dim=c["hidden_dim"],blocks=c["blocks"],
-                                 heads=c["heads"],dropout=c["dropout"]).to(device)
+    model=build_v41_model(
+        c["mechanism"], hidden_dim=c["hidden_dim"], blocks=c["blocks"],
+        heads=c["heads"], dropout=c["dropout"],
+    ).to(device)
     model.load_state_dict(state["model"]); return model.eval(),c
 
 
