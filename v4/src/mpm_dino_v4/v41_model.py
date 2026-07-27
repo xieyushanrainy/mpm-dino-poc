@@ -108,6 +108,90 @@ class M6Adapter(nn.Module):
         return hidden + gate * torch.tanh(self.adapter(features))
 
 
+class GeometryAwareRegionTokens(nn.Module):
+    """Pool point DINO into a small reference-geometry-aware token set."""
+
+    def __init__(
+        self, visual_dim: int, hidden_dim: int, heads: int,
+        region_tokens: int = 4,
+    ):
+        super().__init__()
+        self.region_tokens = region_tokens
+        self.point = nn.Sequential(
+            nn.Linear(visual_dim + 7, hidden_dim), nn.SiLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+        )
+        self.queries = nn.Parameter(
+            torch.randn(region_tokens, hidden_dim) / math.sqrt(hidden_dim)
+        )
+        self.pool = nn.MultiheadAttention(
+            hidden_dim, heads, batch_first=True,
+        )
+        self.pool_norm = nn.LayerNorm(hidden_dim)
+
+    def forward(
+        self, visual, dino_valid, reference, input_mask,
+        neighbour_mask, rest_edge_lengths,
+    ):
+        centre = masked_mean(reference, input_mask)
+        centred = reference - centre[:, None]
+        radius = torch.linalg.vector_norm(
+            centred, dim=-1
+        ).masked_fill(~input_mask, 0).amax(1).clamp_min(1e-6)
+        normalized_reference = centred / radius[:, None, None]
+        valid_edges = neighbour_mask & input_mask[:, :, None]
+        edge_weight = valid_edges.to(rest_edge_lengths.dtype)
+        mean_edge = (
+            (rest_edge_lengths * edge_weight).sum(-1)
+            / edge_weight.sum(-1).clamp_min(1)
+        ) / radius[:, None]
+        degree = edge_weight.mean(-1)
+        point_features = self.point(torch.cat((
+            visual,
+            normalized_reference,
+            mean_edge[..., None],
+            degree[..., None],
+            dino_valid[..., None].to(visual.dtype),
+            input_mask[..., None].to(visual.dtype),
+        ), -1))
+        queries = self.queries[None].expand(reference.shape[0], -1, -1)
+        pooled, _ = self.pool(
+            queries, point_features, point_features,
+            key_padding_mask=~input_mask,
+            need_weights=False,
+        )
+        return self.pool_norm(queries + pooled)
+
+
+class RegionTokenLocalAdapter(nn.Module):
+    """Inject region tokens into local states through a zero-init residual."""
+
+    def __init__(self, hidden_dim: int, heads: int):
+        super().__init__()
+        self.query_norm = nn.LayerNorm(hidden_dim)
+        self.memory_norm = nn.LayerNorm(hidden_dim)
+        self.attention = nn.MultiheadAttention(
+            hidden_dim, heads, batch_first=True,
+        )
+        self.out = nn.Linear(hidden_dim, hidden_dim)
+        nn.init.zeros_(self.out.weight)
+        nn.init.zeros_(self.out.bias)
+
+    def forward(self, hidden, region_tokens, point_mask):
+        batch, frames, points, width = hidden.shape
+        queries = self.query_norm(hidden).reshape(
+            batch, frames * points, width
+        )
+        attended, _ = self.attention(
+            queries,
+            self.memory_norm(region_tokens),
+            self.memory_norm(region_tokens),
+            need_weights=False,
+        )
+        update = self.out(attended).reshape(batch, frames, points, width)
+        return (hidden + update) * point_mask[:, None, :, None]
+
+
 class PhysicalBlock(nn.Module):
     def __init__(self, hidden_dim, heads, dropout):
         super().__init__()
@@ -138,7 +222,7 @@ class V41TrajectorySurrogate(nn.Module):
     def __init__(self, mechanism="m1", dino_dim=384, visual_dim=32, hidden_dim=128,
                  blocks=4, heads=4, dropout=0.1, frames=59, gradient_checkpointing=True):
         super().__init__()
-        if mechanism not in {"m1", "m2", "m6", "none"}:
+        if mechanism not in {"m1", "m2", "m6", "none", "split_region"}:
             raise ValueError(mechanism)
         self.mechanism, self.frames = mechanism, frames
         self.gradient_checkpointing = gradient_checkpointing
@@ -154,6 +238,11 @@ class V41TrajectorySurrogate(nn.Module):
             self.visual = nn.ModuleList(M2LocalMemory(hidden_dim, visual_dim, heads) for _ in range(blocks))
         elif mechanism == "m6":
             self.visual = M6Adapter(hidden_dim, visual_dim)
+        elif mechanism == "split_region":
+            self.region_encoder = GeometryAwareRegionTokens(
+                visual_dim, hidden_dim, heads, region_tokens=4,
+            )
+            self.visual = RegionTokenLocalAdapter(hidden_dim, heads)
         else:
             self.visual = None
         self.local_head = nn.Sequential(nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, hidden_dim), nn.SiLU(), nn.Linear(hidden_dim, 3))
@@ -201,7 +290,14 @@ class V41TrajectorySurrogate(nn.Module):
             hidden=self.visual(hidden,visual,dino_valid,neighbour_indices,neighbour_mask,rest_edge_vectors)
         pooled=masked_mean(hidden,input_mask[:,None].expand(-1,self.frames,-1),2)
         residual_com=self.com_head(pooled)
-        raw=self.local_head(hidden)*input_mask[:,None,:,None]
+        local_hidden = hidden
+        if self.mechanism == "split_region":
+            region_tokens = self.region_encoder(
+                visual, dino_valid, reference, input_mask,
+                neighbour_mask, rest_edge_lengths,
+            )
+            local_hidden = self.visual(hidden, region_tokens, input_mask)
+        raw=self.local_head(local_hidden)*input_mask[:,None,:,None]
         residual_local=(raw-masked_mean(raw,input_mask[:,None].expand(-1,self.frames,-1),2)[:,:,None])*input_mask[:,None,:,None]
         residual=(residual_com[:,:,None]+residual_local)*input_mask[:,None,:,None]
         return FullTrajectoryOutput(residual_com,residual_local,residual,ballistic,ballistic+residual)

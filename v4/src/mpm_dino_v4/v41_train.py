@@ -12,7 +12,8 @@ import torch
 from torch.utils.data import DataLoader
 
 from .full_losses import (
-    compute_full_trajectory_loss, compute_shape_balanced_trajectory_loss,
+    compute_full_trajectory_loss, compute_legacy_shape_aux_trajectory_loss,
+    compute_shape_balanced_trajectory_loss,
 )
 from .v41_data import MODEL_INPUT_KEYS, UIDBalancedSampler, V41TrajectoryDataset
 from .v41_model import build_v41_model
@@ -55,6 +56,10 @@ def run_epoch(model, loader, device, optimizer=None, accumulation=4, max_batches
                     loss = compute_full_trajectory_loss(output, batch)
                 elif loss_profile == "shape_balanced_v1":
                     loss = compute_shape_balanced_trajectory_loss(output, batch)
+                elif loss_profile == "legacy_shape_aux_v1":
+                    loss = compute_legacy_shape_aux_trajectory_loss(
+                        output, batch,
+                    )
                 else:
                     raise ValueError(f"unsupported V4.1 loss profile: {loss_profile}")
             if training:
@@ -131,7 +136,9 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
               max_batches=None, stage1_checkpoint=None, zero_reference=None,
               amp=None, resume=True, plateau_patience=5,
               loss_profile="legacy"):
-    if loss_profile not in {"legacy", "shape_balanced_v1"}:
+    if loss_profile not in {
+        "legacy", "shape_balanced_v1", "legacy_shape_aux_v1",
+    }:
         raise ValueError(f"unsupported V4.1 loss profile: {loss_profile}")
     seed_all(seed)
     output = Path(output); output.mkdir(parents=True, exist_ok=True)
@@ -144,6 +151,7 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
         mechanism, hidden_dim=hidden_dim, blocks=blocks, heads=heads,
         dropout=dropout,
     ).to(device)
+    starting_model = state_sha256(model.state_dict())
     starting_trunk = None
     if mechanism == "m6" and stage1_checkpoint:
         state = torch.load(stage1_checkpoint, map_location="cpu", weights_only=False)
@@ -179,6 +187,7 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
         "amp": use_amp, "resume": resume,
         "plateau_patience": plateau_patience,
         "loss_profile": loss_profile,
+        "starting_model_sha256": starting_model,
         "loss": (
             {
                 "implementation": "compute_full_trajectory_loss",
@@ -202,11 +211,37 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
                 },
                 "key_horizons": [16, 30, 40],
                 "strain": "(edge_length-rest_length)/rest_length",
+            } if loss_profile == "shape_balanced_v1"
+            else {
+                "implementation": "compute_legacy_shape_aux_trajectory_loss",
+                "formula": "legacy_total + 0.2 * shape_auxiliary",
+                "legacy": {
+                    "implementation": "compute_full_trajectory_loss",
+                    "normalization": "world_metres",
+                    "weights": {
+                        "residual": 1.0, "position": 1.0, "com": 0.5,
+                        "edge_vector": 0.25, "edge_length": 0.1,
+                        "key_horizons": 0.25,
+                    },
+                    "key_horizons": [4, 8, 16, 59],
+                },
+                "shape_auxiliary": {
+                    "normalization": "per_object_fixed_reference_radius",
+                    "smooth_l1_beta": 0.01,
+                    "outer_weight": 0.2,
+                    "weights": {
+                        "shape": 1.0, "strain": 0.5,
+                        "shape_key_horizons": 0.25,
+                    },
+                    "key_horizons": [16, 30, 40, 59],
+                },
             }
         ),
         "architecture_contract": (
             "exact_v4_track_b_pooled_dino_film"
             if mechanism == "track_b_pooled"
+            else "strict_local_dino_four_region_tokens"
+            if mechanism == "split_region"
             else "v41_correspondence_preserving"
         ),
     }

@@ -7,7 +7,10 @@ from dataclasses import replace
 import torch
 
 from mpm_dino_v2.graph import build_mutual_knn_graph
-from mpm_dino_v4.full_losses import compute_shape_balanced_trajectory_loss
+from mpm_dino_v4.full_losses import (
+    compute_legacy_shape_aux_trajectory_loss,
+    compute_shape_balanced_trajectory_loss,
+)
 from mpm_dino_v4.model import masked_mean
 from mpm_dino_v4.full_model import FullTrajectorySurrogate
 from mpm_dino_v4.v41_data import (
@@ -163,6 +166,47 @@ def test_pooled_track_b_zero_control_keeps_full_architecture_and_validity():
     assert torch.isfinite(first).all()
 
 
+def test_split_region_dino_cannot_change_com_but_can_change_local_shape():
+    x = inputs(frames=5)
+    model = build_v41_model(
+        "split_region", hidden_dim=32, blocks=1, heads=4, dropout=0,
+        frames=5, gradient_checkpointing=False,
+    ).eval()
+    with torch.no_grad():
+        model.visual.out.weight.fill_(0.05)
+        model.local_head[-1].weight.fill_(0.05)
+        zero_inputs = {key: value.clone() for key, value in x.items()}
+        zero_inputs["dino"].zero_()
+        zero = model(**zero_inputs)
+        real = model(**x)
+    assert torch.equal(zero.residual_com, real.residual_com)
+    assert not torch.equal(zero.residual_local, real.residual_local)
+    mask = x["input_mask"][:, None].expand(-1, 5, -1)
+    assert torch.allclose(
+        masked_mean(real.residual_local, mask, 2),
+        torch.zeros(1, 5, 3),
+        atol=1e-7,
+    )
+
+
+def test_split_region_real_zero_initial_weights_are_byte_identical():
+    torch.manual_seed(456)
+    zero = build_v41_model(
+        "split_region", hidden_dim=32, blocks=1, heads=4, dropout=0,
+        frames=5, gradient_checkpointing=False,
+    )
+    torch.manual_seed(456)
+    real = build_v41_model(
+        "split_region", hidden_dim=32, blocks=1, heads=4, dropout=0,
+        frames=5, gradient_checkpointing=False,
+    )
+    assert zero.state_dict().keys() == real.state_dict().keys()
+    assert all(
+        torch.equal(zero.state_dict()[key], real.state_dict()[key])
+        for key in zero.state_dict()
+    )
+
+
 def test_shape_balanced_loss_separates_translation_from_deformation():
     x = inputs(n=12, frames=41)
     model = build_v41_model(
@@ -224,3 +268,29 @@ def test_shape_balanced_key_loss_uses_h16_h30_h40_only():
         replace(output, position=h30), batch
     )
     assert h30_loss.key_horizons > 0
+
+
+def test_legacy_shape_aux_preserves_legacy_and_uses_h59_shape_anchor():
+    x = inputs(n=12, frames=59)
+    model = build_v41_model(
+        "split_region", hidden_dim=32, blocks=1, heads=4, dropout=0,
+        frames=59, gradient_checkpointing=False,
+    ).eval()
+    with torch.no_grad():
+        output = model(**x)
+    batch = {
+        **x,
+        "target": output.position.clone(),
+        "target_mask": x["input_mask"][:, None].expand(-1, 59, -1).clone(),
+    }
+    deformed = output.position.clone()
+    deformed[:, 58, 0, 0] += 0.02
+    loss = compute_legacy_shape_aux_trajectory_loss(
+        replace(output, position=deformed), batch,
+    )
+    assert loss.legacy > 0
+    assert loss.shape > 0
+    assert loss.shape_key_horizons > 0
+    assert torch.allclose(
+        loss.total, loss.legacy + 0.2 * loss.shape_auxiliary,
+    )

@@ -38,6 +38,24 @@ class ShapeBalancedTrajectoryLoss:
     key_horizons: Tensor
 
 
+@dataclass
+class LegacyShapeAuxTrajectoryLoss:
+    """Stable Track-B objective plus a deformation-only auxiliary."""
+
+    total: Tensor
+    legacy: Tensor
+    shape_auxiliary: Tensor
+    residual: Tensor
+    position: Tensor
+    com: Tensor
+    edge_vector: Tensor
+    edge_length: Tensor
+    legacy_key_horizons: Tensor
+    shape: Tensor
+    strain: Tensor
+    shape_key_horizons: Tensor
+
+
 def compute_full_trajectory_loss(
     output: FullTrajectoryOutput,
     batch: dict,
@@ -164,3 +182,98 @@ def compute_shape_balanced_trajectory_loss(
     terms = (world, com, shape, strain, key_horizons)
     total = sum(weight * term for weight, term in zip(weights, terms))
     return ShapeBalancedTrajectoryLoss(total, *terms)
+
+
+def compute_legacy_shape_aux_trajectory_loss(
+    output: FullTrajectoryOutput,
+    batch: dict,
+    auxiliary_weight: float = 0.2,
+    shape_weights=(1.0, 0.5, 0.25),
+    beta: float = 0.01,
+) -> LegacyShapeAuxTrajectoryLoss:
+    """Add shape supervision without duplicating Track-B world/COM terms.
+
+    The legacy objective remains intact. The auxiliary contains only
+    centre-relative shape, normalized edge strain, and shape at
+    H16/H30/H40/H59. H59 is a training stability anchor, not a promotion
+    horizon.
+    """
+    legacy = compute_full_trajectory_loss(output, batch)
+    target, mask = batch["target"], batch["target_mask"]
+    reference, input_mask = batch["reference"], batch["input_mask"]
+    reference_com = masked_mean(reference, input_mask)
+    reference_radius = torch.linalg.vector_norm(
+        reference - reference_com[:, None], dim=-1
+    ).masked_fill(~input_mask, 0).amax(1).clamp_min(1e-6)
+    coordinate_scale = reference_radius[:, None, None, None]
+
+    predicted_com = masked_mean(output.position, mask, dim=2)
+    target_com = masked_mean(target, mask, dim=2)
+    predicted_shape = output.position - predicted_com[:, :, None]
+    target_shape = target - target_com[:, :, None]
+    shape = masked_smooth_l1(
+        predicted_shape / coordinate_scale,
+        target_shape / coordinate_scale,
+        mask,
+        beta,
+    )
+
+    batch_size, frames, points, _ = target.shape
+    flat_pred = output.position.reshape(batch_size * frames, points, 3)
+    flat_target = target.reshape(batch_size * frames, points, 3)
+    flat_mask = mask.reshape(batch_size * frames, points)
+    indices = batch["neighbour_indices"][:, None].expand(
+        -1, frames, -1, -1
+    ).reshape(batch_size * frames, points, -1)
+    graph_mask = batch["neighbour_mask"][:, None].expand(
+        -1, frames, -1, -1
+    ).reshape(batch_size * frames, points, -1)
+    valid_edges = edge_validity(flat_mask, indices, graph_mask)
+    predicted_vectors = gather_neighbours(flat_pred, indices) - flat_pred[:, :, None]
+    target_vectors = gather_neighbours(flat_target, indices) - flat_target[:, :, None]
+    rest_lengths = batch["rest_edge_lengths"][:, None].expand(
+        -1, frames, -1, -1
+    ).reshape(batch_size * frames, points, -1).clamp_min(1e-8)
+    predicted_strain = (
+        torch.linalg.vector_norm(predicted_vectors, dim=-1) - rest_lengths
+    ) / rest_lengths
+    target_strain = (
+        torch.linalg.vector_norm(target_vectors, dim=-1) - rest_lengths
+    ) / rest_lengths
+    raw_strain = F.smooth_l1_loss(
+        predicted_strain, target_strain, reduction="none", beta=beta
+    )
+    strain = (
+        raw_strain * valid_edges.to(raw_strain.dtype)
+    ).sum() / valid_edges.sum().clamp_min(1)
+
+    key_indices = [
+        horizon - 1 for horizon in (16, 30, 40, 59) if horizon <= frames
+    ]
+    shape_key_horizons = masked_smooth_l1(
+        predicted_shape[:, key_indices] / coordinate_scale,
+        target_shape[:, key_indices] / coordinate_scale,
+        mask[:, key_indices],
+        beta,
+    )
+    shape_auxiliary = sum(
+        weight * term
+        for weight, term in zip(
+            shape_weights, (shape, strain, shape_key_horizons)
+        )
+    )
+    total = legacy.total + auxiliary_weight * shape_auxiliary
+    return LegacyShapeAuxTrajectoryLoss(
+        total=total,
+        legacy=legacy.total,
+        shape_auxiliary=shape_auxiliary,
+        residual=legacy.residual,
+        position=legacy.position,
+        com=legacy.com,
+        edge_vector=legacy.edge_vector,
+        edge_length=legacy.edge_length,
+        legacy_key_horizons=legacy.key_horizons,
+        shape=shape,
+        strain=strain,
+        shape_key_horizons=shape_key_horizons,
+    )
