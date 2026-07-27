@@ -28,6 +28,16 @@ class FullTrajectoryLoss:
     key_horizons: Tensor
 
 
+@dataclass
+class ShapeBalancedTrajectoryLoss:
+    total: Tensor
+    world: Tensor
+    com: Tensor
+    shape: Tensor
+    strain: Tensor
+    key_horizons: Tensor
+
+
 def compute_full_trajectory_loss(
     output: FullTrajectoryOutput,
     batch: dict,
@@ -69,3 +79,88 @@ def compute_full_trajectory_loss(
     terms = (residual, position, com, edge_vector, edge_length, key_horizons)
     total = sum(weight * term for weight, term in zip(weights, terms))
     return FullTrajectoryLoss(total, *terms)
+
+
+def compute_shape_balanced_trajectory_loss(
+    output: FullTrajectoryOutput,
+    batch: dict,
+    weights=(1.0, 0.5, 1.0, 0.5, 0.25),
+    beta: float = 0.01,
+) -> ShapeBalancedTrajectoryLoss:
+    """Radius-normalized trajectory loss with explicit deformation supervision.
+
+    World, COM, centre-relative shape, and key-horizon errors are normalized by
+    the fixed frame-0 reference radius. Edge strain is already dimensionless.
+    H16/H30/H40 are the key horizons, matching guarded checkpoint selection.
+    """
+    target, mask = batch["target"], batch["target_mask"]
+    reference, input_mask = batch["reference"], batch["input_mask"]
+    reference_com = masked_mean(reference, input_mask)
+    reference_radius = torch.linalg.vector_norm(
+        reference - reference_com[:, None], dim=-1
+    ).masked_fill(~input_mask, 0).amax(1).clamp_min(1e-6)
+    coordinate_scale = reference_radius[:, None, None, None]
+
+    world = masked_smooth_l1(
+        output.position / coordinate_scale,
+        target / coordinate_scale,
+        mask,
+        beta,
+    )
+    predicted_com = masked_mean(output.position, mask, dim=2)
+    target_com = masked_mean(target, mask, dim=2)
+    frame_valid = mask.any(dim=2)
+    com = masked_smooth_l1(
+        predicted_com / reference_radius[:, None, None],
+        target_com / reference_radius[:, None, None],
+        frame_valid,
+        beta,
+    )
+    predicted_shape = output.position - predicted_com[:, :, None]
+    target_shape = target - target_com[:, :, None]
+    shape = masked_smooth_l1(
+        predicted_shape / coordinate_scale,
+        target_shape / coordinate_scale,
+        mask,
+        beta,
+    )
+
+    batch_size, frames, points, _ = target.shape
+    flat_pred = output.position.reshape(batch_size * frames, points, 3)
+    flat_target = target.reshape(batch_size * frames, points, 3)
+    flat_mask = mask.reshape(batch_size * frames, points)
+    indices = batch["neighbour_indices"][:, None].expand(
+        -1, frames, -1, -1
+    ).reshape(batch_size * frames, points, -1)
+    graph_mask = batch["neighbour_mask"][:, None].expand(
+        -1, frames, -1, -1
+    ).reshape(batch_size * frames, points, -1)
+    valid_edges = edge_validity(flat_mask, indices, graph_mask)
+    predicted_vectors = gather_neighbours(flat_pred, indices) - flat_pred[:, :, None]
+    target_vectors = gather_neighbours(flat_target, indices) - flat_target[:, :, None]
+    rest_lengths = batch["rest_edge_lengths"][:, None].expand(
+        -1, frames, -1, -1
+    ).reshape(batch_size * frames, points, -1).clamp_min(1e-8)
+    predicted_strain = (
+        torch.linalg.vector_norm(predicted_vectors, dim=-1) - rest_lengths
+    ) / rest_lengths
+    target_strain = (
+        torch.linalg.vector_norm(target_vectors, dim=-1) - rest_lengths
+    ) / rest_lengths
+    raw_strain = F.smooth_l1_loss(
+        predicted_strain, target_strain, reduction="none", beta=beta
+    )
+    strain = (
+        raw_strain * valid_edges.to(raw_strain.dtype)
+    ).sum() / valid_edges.sum().clamp_min(1)
+
+    key_indices = [horizon - 1 for horizon in (16, 30, 40) if horizon <= frames]
+    key_horizons = masked_smooth_l1(
+        output.position[:, key_indices] / coordinate_scale,
+        target[:, key_indices] / coordinate_scale,
+        mask[:, key_indices],
+        beta,
+    )
+    terms = (world, com, shape, strain, key_horizons)
+    total = sum(weight * term for weight, term in zip(weights, terms))
+    return ShapeBalancedTrajectoryLoss(total, *terms)

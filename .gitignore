@@ -31,3 +31,7 @@ v2/artifacts/**/*.mp4
 v3/runs/*
 v3/artifacts/**/*.pt
 v3/artifacts/**/*.mp4
+
+# V4 fixed-graph caches and model blobs are reproducible from tracked manifests.
+v4/cache/
+v4/runs/**/*.pt

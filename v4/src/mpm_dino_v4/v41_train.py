@@ -11,7 +11,9 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from .full_losses import compute_full_trajectory_loss
+from .full_losses import (
+    compute_full_trajectory_loss, compute_shape_balanced_trajectory_loss,
+)
 from .v41_data import MODEL_INPUT_KEYS, UIDBalancedSampler, V41TrajectoryDataset
 from .v41_model import build_v41_model
 
@@ -39,7 +41,7 @@ def validation_scores(output, batch):
 
 
 def run_epoch(model, loader, device, optimizer=None, accumulation=4, max_batches=None,
-              scaler=None, amp=False):
+              scaler=None, amp=False, loss_profile="legacy"):
     training = optimizer is not None
     model.train(training)
     totals, batches = {}, 0
@@ -49,7 +51,12 @@ def run_epoch(model, loader, device, optimizer=None, accumulation=4, max_batches
             batch = move(raw, device)
             with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=amp):
                 output = model(**{k: batch[k] for k in MODEL_INPUT_KEYS})
-                loss = compute_full_trajectory_loss(output, batch)
+                if loss_profile == "legacy":
+                    loss = compute_full_trajectory_loss(output, batch)
+                elif loss_profile == "shape_balanced_v1":
+                    loss = compute_shape_balanced_trajectory_loss(output, batch)
+                else:
+                    raise ValueError(f"unsupported V4.1 loss profile: {loss_profile}")
             if training:
                 if scaler is not None:
                     scaler.scale(loss.total / accumulation).backward()
@@ -64,7 +71,15 @@ def run_epoch(model, loader, device, optimizer=None, accumulation=4, max_batches
                     else:
                         optimizer.step()
                     optimizer.zero_grad(set_to_none=True)
-            values = {"loss": loss.total, **validation_scores(output, batch)}
+            values = {
+                "loss": loss.total,
+                **{
+                    f"loss_{name}": getattr(loss, name)
+                    for name in loss.__dataclass_fields__
+                    if name != "total"
+                },
+                **validation_scores(output, batch),
+            }
             for key, value in values.items(): totals[key] = totals.get(key, 0.) + float(value.detach().cpu())
             batches += 1
             if max_batches and batches >= max_batches: break
@@ -114,7 +129,10 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
               epochs=160, draws_per_epoch=40, hidden_dim=128, blocks=4, heads=4,
               dropout=0.1, lr=2e-4, trunk_lr=2e-5, accumulation=4, patience=30,
               max_batches=None, stage1_checkpoint=None, zero_reference=None,
-              amp=None, resume=True, plateau_patience=5):
+              amp=None, resume=True, plateau_patience=5,
+              loss_profile="legacy"):
+    if loss_profile not in {"legacy", "shape_balanced_v1"}:
+        raise ValueError(f"unsupported V4.1 loss profile: {loss_profile}")
     seed_all(seed)
     output = Path(output); output.mkdir(parents=True, exist_ok=True)
     train_ds = V41TrajectoryDataset(root, manifest, "train", dino_mode, seed)
@@ -160,15 +178,32 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
         "zero_reference": str(zero_reference) if zero_reference else None,
         "amp": use_amp, "resume": resume,
         "plateau_patience": plateau_patience,
-        "loss": {
-            "implementation": "compute_full_trajectory_loss",
-            "weights": {
-                "residual": 1.0, "position": 1.0, "com": 0.5,
-                "edge_vector": 0.25, "edge_length": 0.1,
-                "key_horizons": 0.25,
-            },
-            "key_horizon_indices": [3, 7, 15, 58],
-        },
+        "loss_profile": loss_profile,
+        "loss": (
+            {
+                "implementation": "compute_full_trajectory_loss",
+                "normalization": "world_metres",
+                "smooth_l1_beta": 0.001,
+                "weights": {
+                    "residual": 1.0, "position": 1.0, "com": 0.5,
+                    "edge_vector": 0.25, "edge_length": 0.1,
+                    "key_horizons": 0.25,
+                },
+                "key_horizons": [4, 8, 16, 59],
+            }
+            if loss_profile == "legacy"
+            else {
+                "implementation": "compute_shape_balanced_trajectory_loss",
+                "normalization": "per_object_fixed_reference_radius",
+                "smooth_l1_beta": 0.01,
+                "weights": {
+                    "world": 1.0, "com": 0.5, "shape": 1.0,
+                    "strain": 0.5, "key_horizons": 0.25,
+                },
+                "key_horizons": [16, 30, 40],
+                "strain": "(edge_length-rest_length)/rest_length",
+            }
+        ),
         "architecture_contract": (
             "exact_v4_track_b_pooled_dino_film"
             if mechanism == "track_b_pooled"
@@ -183,8 +218,12 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
         prior = state["config"]
         immutable = ("mechanism","dino_mode","seed","hidden_dim","blocks","heads",
                      "dropout","lr","trunk_lr","accumulation","manifest_content_sha256",
-                     "draws_per_epoch","plateau_patience")
-        if any(prior.get(k) != config.get(k) for k in immutable):
+                     "draws_per_epoch","plateau_patience","loss_profile")
+        if any(
+            prior.get(k, "legacy" if k == "loss_profile" else None)
+            != config.get(k)
+            for k in immutable
+        ):
             raise ValueError("refusing to resume with a changed scientific configuration")
         model.load_state_dict(state["model"])
         if "optimizer" in state: optimizer.load_state_dict(state["optimizer"])
@@ -201,8 +240,14 @@ def train_v41(root, manifest, output, mechanism, dino_mode, seed, device="mps",
     with (output/"history.jsonl").open(mode) as history:
         for epoch in range(start_epoch, epochs+1):
             started=time.perf_counter()
-            train=run_epoch(model,train_loader,torch.device(device),optimizer,accumulation,max_batches,scaler,use_amp)
-            validation=run_epoch(model,val_loader,torch.device(device),None,accumulation,max_batches,None,use_amp)
+            train=run_epoch(
+                model, train_loader, torch.device(device), optimizer,
+                accumulation, max_batches, scaler, use_amp, loss_profile,
+            )
+            validation=run_epoch(
+                model, val_loader, torch.device(device), None,
+                accumulation, max_batches, None, use_amp, loss_profile,
+            )
             selection=validation["selection_nrmse"]; scheduler.step(selection)
             eligible = zero_h1 is None or validation["h1_rmse_m"] <= 1.10*zero_h1
             seen_eligible = seen_eligible or eligible

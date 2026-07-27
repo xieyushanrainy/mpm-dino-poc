@@ -3,6 +3,9 @@
 Status: implementation and six-run matrix prepared; production training has not
 been launched.
 
+The optional shape-balanced loss follow-up is documented separately in
+[`TRACK_B_SHAPE_LOSS_EXPERIMENT.md`](TRACK_B_SHAPE_LOSS_EXPERIMENT.md).
+
 ## Scientific question
 
 Repeat the original V4 Track B pooled-DINO/FiLM architecture on the corrected

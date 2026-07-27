@@ -54,14 +54,29 @@ def provenance(args, manifest):
             "injection": "blockwise FiLM",
             "physical_backbone": "width 128, four graph-temporal blocks, four heads",
         },
-        "loss": {
-            "implementation": "compute_full_trajectory_loss",
-            "weights": [1.0, 1.0, 0.5, 0.25, 0.1, 0.25],
-            "terms": [
-                "residual", "position", "com", "edge_vector",
-                "edge_length", "key_horizons",
-            ],
-        },
+        "loss_profile": args.loss_profile,
+        "loss": (
+            {
+                "implementation": "compute_full_trajectory_loss",
+                "normalization": "world_metres",
+                "weights": [1.0, 1.0, 0.5, 0.25, 0.1, 0.25],
+                "terms": [
+                    "residual", "position", "com", "edge_vector",
+                    "edge_length", "key_horizons",
+                ],
+                "key_horizons": [4, 8, 16, 59],
+            }
+            if args.loss_profile == "legacy"
+            else {
+                "implementation": "compute_shape_balanced_trajectory_loss",
+                "normalization": "per_object_fixed_reference_radius",
+                "weights": [1.0, 0.5, 1.0, 0.5, 0.25],
+                "terms": [
+                    "world", "com", "shape", "strain", "key_horizons",
+                ],
+                "key_horizons": [16, 30, 40],
+            }
+        ),
     }
 
 
@@ -93,6 +108,7 @@ def train_if_needed(path, root, manifest, mode, seed, args, zero_reference=None)
             amp=args.amp,
             resume=True,
             zero_reference=zero_reference,
+            loss_profile=args.loss_profile,
         )
     except BaseException as exc:
         (path / "RUN_FAILED.json").write_text(json.dumps({
@@ -119,7 +135,7 @@ def run(args):
         previous = json.loads(matrix_config.read_text())
         keys = (
             "epochs", "draws", "patience", "plateau_patience", "seeds",
-            "device", "amp",
+            "device", "amp", "loss_profile",
         )
         changed = [
             key for key in keys
@@ -186,5 +202,10 @@ if __name__ == "__main__":
     parser.add_argument("--plateau-patience", type=int, default=5)
     parser.add_argument(
         "--amp", action=argparse.BooleanOptionalAction, default=False,
+    )
+    parser.add_argument(
+        "--loss-profile",
+        choices=("legacy", "shape_balanced_v1"),
+        default="legacy",
     )
     run(parser.parse_args())

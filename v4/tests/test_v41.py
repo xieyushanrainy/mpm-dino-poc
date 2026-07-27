@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 
 import torch
 
 from mpm_dino_v2.graph import build_mutual_knn_graph
+from mpm_dino_v4.full_losses import compute_shape_balanced_trajectory_loss
 from mpm_dino_v4.model import masked_mean
 from mpm_dino_v4.full_model import FullTrajectorySurrogate
 from mpm_dino_v4.v41_data import (
@@ -159,3 +161,66 @@ def test_pooled_track_b_zero_control_keeps_full_architecture_and_validity():
     assert torch.equal(x["dino_valid"], valid)
     assert torch.equal(first, second)
     assert torch.isfinite(first).all()
+
+
+def test_shape_balanced_loss_separates_translation_from_deformation():
+    x = inputs(n=12, frames=41)
+    model = build_v41_model(
+        "track_b_pooled", hidden_dim=32, blocks=1, heads=4, dropout=0,
+        frames=41, gradient_checkpointing=False,
+    ).eval()
+    with torch.no_grad():
+        output = model(**x)
+    batch = {
+        **x,
+        "target": output.position.clone(),
+        "target_mask": x["input_mask"][:, None].expand(-1, 41, -1).clone(),
+    }
+    perfect = compute_shape_balanced_trajectory_loss(output, batch)
+    assert perfect.total == 0
+
+    translated = output.position.clone()
+    translated[:, :, :, 0] += 0.02
+    translated_loss = compute_shape_balanced_trajectory_loss(
+        replace(output, position=translated), batch
+    )
+    assert translated_loss.world > 0 and translated_loss.com > 0
+    assert translated_loss.shape < 1e-8
+    assert translated_loss.strain < 1e-8
+
+    deformed = output.position.clone()
+    deformed[:, :, 0, 0] += 0.02
+    deformed_loss = compute_shape_balanced_trajectory_loss(
+        replace(output, position=deformed), batch
+    )
+    assert deformed_loss.shape > 0
+    assert deformed_loss.strain > 0
+
+
+def test_shape_balanced_key_loss_uses_h16_h30_h40_only():
+    x = inputs(n=12, frames=41)
+    model = build_v41_model(
+        "track_b_pooled", hidden_dim=32, blocks=1, heads=4, dropout=0,
+        frames=41, gradient_checkpointing=False,
+    ).eval()
+    with torch.no_grad():
+        output = model(**x)
+    batch = {
+        **x,
+        "target": output.position.clone(),
+        "target_mask": x["input_mask"][:, None].expand(-1, 41, -1).clone(),
+    }
+    h4_only = output.position.clone()
+    h4_only[:, 3, :, 0] += 0.02
+    h4_loss = compute_shape_balanced_trajectory_loss(
+        replace(output, position=h4_only), batch
+    )
+    assert h4_loss.world > 0
+    assert h4_loss.key_horizons == 0
+
+    h30 = output.position.clone()
+    h30[:, 29, :, 0] += 0.02
+    h30_loss = compute_shape_balanced_trajectory_loss(
+        replace(output, position=h30), batch
+    )
+    assert h30_loss.key_horizons > 0
