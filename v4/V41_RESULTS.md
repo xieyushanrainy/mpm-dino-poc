@@ -201,3 +201,38 @@ and does not justify shuffled controls.
 
 The full integrity and test report is
 [`../v41/runs/track_b_pooled_cap150_p30_fp32/analysis_20260727/RESULTS.md`](../v41/runs/track_b_pooled_cap150_p30_fp32/analysis_20260727/RESULTS.md).
+
+## Strict-local-DINO region-token follow-up
+
+The subsequent `split_region` experiment protected the COM forward path from
+DINO and injected four geometry-aware visual region tokens only into the
+zero-mean local deformation branch. It used the original Track B loss plus a
+0.2-weighted shape-only auxiliary, with matched full-model initialization for
+real and zero across seeds 42/123/456.
+
+All six runs are complete, finite, hash-valid, H1-eligible, and scientifically
+matched. The mechanism passes the frozen numerical promotion rule:
+
+- Panel Z H30: real 41.58 mm versus zero 44.46 mm, 3/3 seed wins;
+- Panel Z H40: real 34.17 mm versus zero 35.02 mm, 2/3 seed wins;
+- Panel Z H1: real 4.88 mm versus zero 7.15 mm.
+
+The interpretation is substantially weaker than the promotion label. The
+H30/H40 paired-UID bootstrap intervals include zero, shape and edge errors are
+effectively unchanged, and the gain is almost entirely COM error. Moreover,
+zeroing DINO inside each trained real checkpoint changes predictions by only
+nanometres and leaves the COM-head output bit-identical. Thus the learned
+visual path is practically inactive at inference; the result is more
+consistent with a training-path/regularization effect than demonstrated use of
+DINO content.
+
+Real also worsens Panel Z H59 by 9.60% and increases late penetration. H59 is
+diagnostic-only, so this does not cancel formal promotion, but it is an
+important stability trade-off.
+
+The promotion authorizes matched point-shuffled and scene-shuffled controls
+for all three seeds. Until they are run, this experiment does not establish
+object-level DINO benefit or point correspondence.
+
+The full report and raw analysis artifacts are in
+[`../v41/runs/track_b_split_region_cap100_p15_fp32/analysis_20260727/RESULTS.md`](../v41/runs/track_b_split_region_cap100_p15_fp32/analysis_20260727/RESULTS.md).
