@@ -8,6 +8,7 @@ import torch
 
 from mpm_dino_v2.graph import build_mutual_knn_graph
 from mpm_dino_v4.full_losses import (
+    compute_local_shape_trajectory_loss,
     compute_legacy_shape_aux_trajectory_loss,
     compute_shape_balanced_trajectory_loss,
 )
@@ -21,6 +22,7 @@ from mpm_dino_v4.v41_model import (
     M1Fusion, M2LocalMemory, V41PooledTrackBSurrogate,
     V41TrajectorySurrogate, build_v41_model,
 )
+from mpm_dino_v4.v41_shape_train import Phase2FamilySampler
 
 
 def inputs(n=12, frames=5):
@@ -294,3 +296,69 @@ def test_legacy_shape_aux_preserves_legacy_and_uses_h59_shape_anchor():
     assert torch.allclose(
         loss.total, loss.legacy + 0.2 * loss.shape_auxiliary,
     )
+
+
+def test_local_shape_loss_is_translation_invariant_and_penalizes_shape():
+    x = inputs(n=12, frames=59)
+    model = build_v41_model(
+        "split_region", hidden_dim=32, blocks=1, heads=4, dropout=0,
+        frames=59, gradient_checkpointing=False,
+    ).eval()
+    with torch.no_grad():
+        output = model(**x)
+    batch = {
+        **x,
+        "family": ["soft_body"],
+        "target": output.ballistic.clone(),
+        "target_mask": x["input_mask"][:, None].expand(-1, 59, -1).clone(),
+    }
+    baseline = compute_local_shape_trajectory_loss(output, batch)
+    translated = batch["target"].clone()
+    translated += torch.linspace(0, 0.2, 59)[None, :, None, None]
+    translated_loss = compute_local_shape_trajectory_loss(
+        output, {**batch, "target": translated},
+    )
+    assert torch.allclose(baseline.total, translated_loss.total, atol=1e-7)
+
+    deformed = batch["target"].clone()
+    deformed[:, 29, 0, 0] += 0.02
+    deformed_loss = compute_local_shape_trajectory_loss(
+        output, {**batch, "target": deformed},
+    )
+    assert deformed_loss.shape > baseline.shape
+    assert deformed_loss.strain > baseline.strain
+
+
+def test_phase2_rigid_negative_control_and_family_quota():
+    x = inputs(n=12, frames=59)
+    model = build_v41_model(
+        "split_region", hidden_dim=32, blocks=1, heads=4, dropout=0,
+        frames=59, gradient_checkpointing=False,
+    ).eval()
+    with torch.no_grad():
+        output = model(**x)
+    local = torch.randn_like(output.residual_local)
+    local -= local.mean(2, keepdim=True)
+    changed = replace(output, residual_local=local)
+    batch = {
+        **x,
+        "family": ["rigid"],
+        "target": output.ballistic.clone(),
+        "target_mask": x["input_mask"][:, None].expand(-1, 59, -1).clone(),
+    }
+    loss = compute_local_shape_trajectory_loss(changed, batch)
+    assert loss.rigid_zero_local > 0
+
+    class Dummy:
+        uids = ["s1", "s2", "r1"]
+        rows = [
+            {"family": "soft_body"},
+            {"family": "soft_body"},
+            {"family": "rigid"},
+        ]
+        by_uid = {"s1": [0], "s2": [1], "r1": [2]}
+
+    sampler = Phase2FamilySampler(Dummy(), 40, 42, soft_fraction=0.75)
+    families = [Dummy.rows[index]["family"] for index in sampler]
+    assert families.count("soft_body") == 30
+    assert families.count("rigid") == 10

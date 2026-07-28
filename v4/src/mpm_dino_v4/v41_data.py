@@ -98,12 +98,21 @@ def validate_v41_manifest(manifest: dict) -> None:
 class V41TrajectoryDataset(Dataset):
     """Panel Z/V episodes with shared static tensors and a fixed reference graph."""
 
-    def __init__(self, root, manifest, split, dino_mode="real", seed=42, cache_graphs=True):
+    def __init__(
+        self, root, manifest, split, dino_mode="real", seed=42,
+        cache_graphs=True, families=None,
+    ):
         if dino_mode not in {"real", "zero", "scene_shuffled", "point_shuffled"}:
             raise ValueError(dino_mode)
         self.root, self.manifest, self.split = Path(root), manifest, split
         self.dino_mode, self.seed = dino_mode, seed
         ids = manifest["splits"][split]["panel_z"] + manifest["splits"][split]["panel_v"]
+        if families is not None:
+            families = set(families)
+            ids = [
+                episode for episode in ids
+                if manifest["episodes"][episode]["family"] in families
+            ]
         self.rows = [manifest["episodes"][episode] for episode in ids]
         self.by_uid = defaultdict(list)
         for index, row in enumerate(self.rows):

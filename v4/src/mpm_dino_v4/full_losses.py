@@ -56,6 +56,19 @@ class LegacyShapeAuxTrajectoryLoss:
     shape_key_horizons: Tensor
 
 
+@dataclass
+class LocalShapeTrajectoryLoss:
+    """COM-free objective for the Phase-2 soft-deformation experiment."""
+
+    total: Tensor
+    shape: Tensor
+    edge_vector: Tensor
+    strain: Tensor
+    key_horizons: Tensor
+    rigid_zero_local: Tensor
+    mean_deformation_weight: Tensor
+
+
 def compute_full_trajectory_loss(
     output: FullTrajectoryOutput,
     batch: dict,
@@ -276,4 +289,145 @@ def compute_legacy_shape_aux_trajectory_loss(
         shape=shape,
         strain=strain,
         shape_key_horizons=shape_key_horizons,
+    )
+
+
+def compute_local_shape_trajectory_loss(
+    output: FullTrajectoryOutput,
+    batch: dict,
+    weights=(1.0, 0.25, 0.5, 0.25, 0.25),
+    beta: float = 0.01,
+) -> LocalShapeTrajectoryLoss:
+    """Train only centre-relative shape with deformation-weighted frames.
+
+    Ground-truth COM is used only to construct the supervision target. The
+    model receives no future COM. The prediction baseline is the centred
+    ballistic trajectory plus the model's zero-mean local residual.
+    """
+    target, mask = batch["target"], batch["target_mask"]
+    reference, input_mask = batch["reference"], batch["input_mask"]
+    reference_com = masked_mean(reference, input_mask)
+    reference_shape = reference - reference_com[:, None]
+    radius = torch.linalg.vector_norm(
+        reference_shape, dim=-1
+    ).masked_fill(~input_mask, 0).amax(1).clamp_min(1e-6)
+    scale = radius[:, None, None, None]
+
+    target_com = masked_mean(target, mask, dim=2)
+    target_shape = target - target_com[:, :, None]
+    ballistic_com = masked_mean(output.ballistic, mask, dim=2)
+    ballistic_shape = output.ballistic - ballistic_com[:, :, None]
+    predicted_shape = ballistic_shape + output.residual_local
+    predicted_shape = (
+        predicted_shape
+        - masked_mean(predicted_shape, mask, dim=2)[:, :, None]
+    )
+
+    raw_deformation = torch.linalg.vector_norm(
+        (target_shape - reference_shape[:, None]) / scale,
+        dim=-1,
+    )
+    point_weight = mask.to(raw_deformation.dtype)
+    frame_deformation = (
+        (raw_deformation * point_weight).sum(2)
+        / point_weight.sum(2).clamp_min(1)
+    )
+    frame_valid = mask.any(2)
+    valid_weight = frame_valid.to(frame_deformation.dtype)
+    mean_deformation = (
+        (frame_deformation * valid_weight).sum(1, keepdim=True)
+        / valid_weight.sum(1, keepdim=True).clamp_min(1)
+    )
+    frame_weight = 0.25 + frame_deformation / mean_deformation.clamp_min(1e-6)
+    frame_weight = frame_weight / (
+        (frame_weight * valid_weight).sum(1, keepdim=True)
+        / valid_weight.sum(1, keepdim=True).clamp_min(1)
+    ).clamp_min(1e-6)
+
+    raw_shape = F.smooth_l1_loss(
+        predicted_shape / scale, target_shape / scale,
+        reduction="none", beta=beta,
+    ).mean(-1)
+    shape_weight = mask.to(raw_shape.dtype) * frame_weight[:, :, None]
+    shape = (
+        (raw_shape * shape_weight).sum()
+        / shape_weight.sum().clamp_min(1)
+    )
+
+    batch_size, frames, points, _ = target.shape
+    flat_pred = predicted_shape.reshape(batch_size * frames, points, 3)
+    flat_target = target_shape.reshape(batch_size * frames, points, 3)
+    flat_mask = mask.reshape(batch_size * frames, points)
+    indices = batch["neighbour_indices"][:, None].expand(
+        -1, frames, -1, -1
+    ).reshape(batch_size * frames, points, -1)
+    graph_mask = batch["neighbour_mask"][:, None].expand(
+        -1, frames, -1, -1
+    ).reshape(batch_size * frames, points, -1)
+    valid_edges = edge_validity(flat_mask, indices, graph_mask)
+    pred_vectors = gather_neighbours(flat_pred, indices) - flat_pred[:, :, None]
+    target_vectors = (
+        gather_neighbours(flat_target, indices) - flat_target[:, :, None]
+    )
+    flat_frame_weight = frame_weight.reshape(batch_size * frames, 1, 1)
+    edge_weight = valid_edges.to(pred_vectors.dtype) * flat_frame_weight
+    raw_edge = F.smooth_l1_loss(
+        pred_vectors / radius.repeat_interleave(frames)[:, None, None, None],
+        target_vectors / radius.repeat_interleave(frames)[:, None, None, None],
+        reduction="none", beta=beta,
+    ).mean(-1)
+    edge_vector = (
+        (raw_edge * edge_weight).sum()
+        / edge_weight.sum().clamp_min(1)
+    )
+
+    rest = batch["rest_edge_lengths"][:, None].expand(
+        -1, frames, -1, -1
+    ).reshape(batch_size * frames, points, -1).clamp_min(1e-8)
+    pred_strain = (
+        torch.linalg.vector_norm(pred_vectors, dim=-1) - rest
+    ) / rest
+    target_strain = (
+        torch.linalg.vector_norm(target_vectors, dim=-1) - rest
+    ) / rest
+    raw_strain = F.smooth_l1_loss(
+        pred_strain, target_strain, reduction="none", beta=beta,
+    )
+    strain = (
+        (raw_strain * edge_weight).sum()
+        / edge_weight.sum().clamp_min(1)
+    )
+
+    key_indices = [
+        horizon - 1 for horizon in (16, 30, 40, 59)
+        if horizon <= frames
+    ]
+    key_horizons = masked_smooth_l1(
+        predicted_shape[:, key_indices] / scale,
+        target_shape[:, key_indices] / scale,
+        mask[:, key_indices],
+        beta,
+    )
+    rigid_objects = torch.tensor(
+        [family == "rigid" for family in batch["family"]],
+        device=mask.device,
+        dtype=torch.bool,
+    )
+    if rigid_objects.any():
+        rigid_mask = mask & rigid_objects[:, None, None]
+        rigid_zero_local = masked_smooth_l1(
+            output.residual_local / scale,
+            torch.zeros_like(output.residual_local),
+            rigid_mask,
+            beta,
+        )
+    else:
+        rigid_zero_local = output.residual_local.sum() * 0
+    terms = (
+        shape, edge_vector, strain, key_horizons, rigid_zero_local,
+    )
+    total = sum(weight * term for weight, term in zip(weights, terms))
+    return LocalShapeTrajectoryLoss(
+        total, *terms,
+        mean_deformation_weight=frame_weight.mean(),
     )

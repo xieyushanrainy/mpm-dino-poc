@@ -236,3 +236,64 @@ object-level DINO benefit or point correspondence.
 
 The full report and raw analysis artifacts are in
 [`../v41/runs/track_b_split_region_cap100_p15_fp32/analysis_20260727/RESULTS.md`](../v41/runs/track_b_split_region_cap100_p15_fp32/analysis_20260727/RESULTS.md).
+
+## Split-region shuffled controls
+
+The authorized point-shuffled and scene-shuffled controls were subsequently
+run for all three seeds with matched initialization and the unchanged
+architecture, loss, data, FP32 budget, validation selector, and H1 guard. All
+six runs are complete, finite, hash-valid, and scientifically eligible.
+
+Real beats point-shuffled on Panel Z at H30 by 3.53 mm with 3/3 seed wins; the
+paired ten-UID interval is [-6.43, -0.35] mm. At H40, real is better by
+1.74 mm with 3/3 seed wins, although the interval [-6.89, +3.40] mm includes
+zero. This supports an alignment-dependent training effect at screening level.
+
+It does not establish improved deformation correspondence. H30/H40
+centre-relative shape and edge metrics are effectively identical across real,
+zero, and shuffled conditions. Together with the earlier nanometre-scale
+within-checkpoint DINO ablation, this indicates that the final region-token
+adapter is practically inactive.
+
+Scene-shuffled results are dominated by a failed optimization basin for seed
+123: its validation selection NRMSE is 0.08418 and its Panel Z H59 test RMSE is
+1346.71 mm. Real wins the scene-shuffled mean at H30/H40, but only 2/3 seeds;
+the evidence is not robust enough to claim object-level visual identity.
+
+The combined interpretation is that aligned DINO affected training dynamics,
+probably through local-loss gradients changing the shared physical trunk, but
+did not produce a useful active shape decoder. A stricter follow-up would
+detach or gradient-isolate the physical trunk from the local DINO branch.
+
+The full shuffled-control report is
+[`../v41/runs/track_b_split_region_shuffled_cap100_p15_fp32/analysis_20260728/RESULTS.md`](../v41/runs/track_b_split_region_shuffled_cap100_p15_fp32/analysis_20260728/RESULTS.md).
+
+## Fixed-weight DINO sensitivity
+
+The three trained real checkpoints were subsequently evaluated with fixed
+weights under real, zero, point-shuffled, scene-shuffled, and scaled DINO
+inputs. COM outputs were bit-identical under every intervention. Zeroing DINO
+changed complete trajectories by only 7.35 nm RMS; point and scene shuffling
+changed them by 2.06 and 4.09 nm RMS.
+
+The diagnostic refines the earlier description of an “inactive adapter.” The
+region tokens and adapter are active in hidden space: zeroing DINO changes the
+region tokens by 0.0889 RMS, while the adapter update itself is approximately
+2.90 times the physical-hidden RMS. However, the complete local displacement
+has RMS only 0.0688 micrometres. The local output pathway suppresses almost all
+of the large latent visual transformation.
+
+Point shuffling changes fixed-weight region tokens by only 0.000605 RMS,
+indicating that the learned pooling is nearly insensitive to pointwise DINO
+placement. Shape and strain errors remain unchanged under all interventions.
+The separately trained shuffled-control differences are therefore best
+understood as optimization-path effects, not active inference-time
+correspondence.
+
+Scaling raw DINO by 0.5, 2, or 5 is mostly cancelled by the projection's input
+LayerNorm and is not a useful amplitude test in this architecture.
+
+Phase 1 consequently fails the inference-dependence criterion and supports
+proceeding to a COM-normalized, local-shape-only experiment. The complete
+diagnostic is documented in
+[`../v41/runs/track_b_split_region_cap100_p15_fp32/analysis_20260728_fixed_weight_dino/RESULTS.md`](../v41/runs/track_b_split_region_cap100_p15_fp32/analysis_20260728_fixed_weight_dino/RESULTS.md).
