@@ -32,7 +32,21 @@ Run the training/validation-only Gate-0 audit from the repository root:
 PYTHONPATH=v2/src:v4/src python v42/audit_targets_and_stages.py
 ```
 
-Gate 1 is a physical-only COM/rotation run. On the lab server:
+The original Gate 1 found useful post-contact COM learning, but damaged the
+near-exact ballistic H1 prediction and did not materially improve rotation over
+an identity baseline. Gate 1B is the approved minimal repair:
+
+- retain the existing ballistic-plus-residual COM parameterization;
+- force the learned COM residual to exactly zero at H1;
+- optimize rotation with smooth squared chordal distance while reporting
+  geodesic radians;
+- add a `0.25` key-horizon chordal rotation term at
+  H1/H8/H16/H30/H40/H59;
+- write `VALIDATION_BASELINES.json` from `best.pt`, stratified by family and
+  Panel Z/V, comparing learned COM with ballistic COM and learned rotation
+  with identity.
+
+Run Gate 1B on the lab server:
 
 ```bash
 PYTHONPATH=v2/src:v3/src:v4/src python -u v42/run_gate1.py \
@@ -43,7 +57,7 @@ PYTHONPATH=v2/src:v3/src:v4/src python -u v42/run_gate1.py \
   --patience 20 \
   --plateau-patience 5 \
   --no-amp \
-  --runs v42/runs/gate1_seed42_456
+  --runs v42/runs/gate1b_seed42_456
 ```
 
 This command does not launch Gate 2. Gate-1 checkpoints must be reviewed

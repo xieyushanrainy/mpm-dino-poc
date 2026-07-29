@@ -7,6 +7,7 @@ import torch
 from mpm_dino_v2.graph import build_mutual_knn_graph
 from mpm_dino_v4.v42_geometry import (
     canonical_targets, identity_rotation_6d, rotation_6d_to_matrix,
+    rotation_chordal,
 )
 from mpm_dino_v4.v42_losses import compute_v42_losses
 from mpm_dino_v4.v42_model import V42RotationAwareSurrogate
@@ -58,6 +59,12 @@ def test_rotation_6d_identity_is_proper():
     assert torch.allclose(torch.linalg.det(matrix), torch.ones(2))
 
 
+def test_chordal_rotation_loss_is_zero_and_has_no_geodesic_floor():
+    identity = torch.eye(3).reshape(1, 3, 3)
+    loss = rotation_chordal(identity, identity)
+    assert torch.equal(loss, torch.zeros_like(loss))
+
+
 def test_kabsch_canonical_target_removes_rigid_motion():
     sample = inputs()
     target = rigid_trajectory(sample["x1"], 7)
@@ -86,6 +93,7 @@ def test_v42_reconstruction_and_protected_local_gradient():
     )
     output = model(**sample)
     assert output.position.shape == (1, 5, 16, 3)
+    assert torch.equal(output.com[:, 0], output.ballistic_com[:, 0])
     local_parameters = (
         list(model.dino_projection.parameters())
         + list(model.region_encoder.parameters())

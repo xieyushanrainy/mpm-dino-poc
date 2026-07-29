@@ -36,6 +36,11 @@ def rotation_geodesic(predicted: Tensor, target: Tensor) -> Tensor:
     return torch.acos(cosine.clamp(-1 + 1e-6, 1 - 1e-6))
 
 
+def rotation_chordal(predicted: Tensor, target: Tensor) -> Tensor:
+    """Smooth squared chordal SO(3) loss; geodesic remains a report metric."""
+    return 0.5 * (predicted - target).square().sum(dim=(-2, -1))
+
+
 @dataclass
 class CanonicalTargets:
     com: Tensor

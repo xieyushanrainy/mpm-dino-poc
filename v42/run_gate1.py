@@ -18,7 +18,7 @@ def main(args):
     root = Path(args.runs)
     root.mkdir(parents=True, exist_ok=True)
     provenance = {
-        "experiment": "v42_gate1_physical_com_rotation",
+        "experiment": "v42_gate1b_ballistic_anchor_chordal_rotation",
         "started_unix": time.time(), "hostname": socket.gethostname(),
         "platform": platform.platform(), "python": platform.python_version(),
         "torch": torch.__version__, "cuda": torch.version.cuda,
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--manifest", default="v41/manifests/v41_uid_splits.json",
     )
-    parser.add_argument("--runs", default="v42/runs/gate1_seed42_456")
+    parser.add_argument("--runs", default="v42/runs/gate1b_seed42_456")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--seeds", type=int, nargs="+", default=[42, 456])
     parser.add_argument("--epochs", type=int, default=120)

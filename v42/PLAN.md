@@ -299,6 +299,24 @@ Evaluation should keep Panel Z and Panel V separate and report:
   remains untouched;
 - review both completed checkpoints before authorizing Gate 2.
 
+### Gate 1B correction after the first two-seed review
+
+The first Gate-1 run learned large post-contact COM corrections, but its
+absolute H1 prediction regressed relative to the finite-difference ballistic
+baseline. Its rotation output improved an identity predictor by only a few
+hundredths of a degree. Before Gate 2:
+
+1. Preserve the ballistic-plus-residual COM design and hard-anchor the
+   residual to zero at H1. Do not force later frames to remain ballistic.
+2. Optimize rotation using
+   `0.5 * ||R_pred - R_target||_F^2`; use geodesic angle only for reporting.
+3. Add a rotation key-horizon term of weight `0.25` over
+   H1/H8/H16/H30/H40/H59 while retaining full-trajectory rotation loss.
+4. At completion, compare model COM against ballistic COM and model rotation
+   against identity for every key horizon, separated by family and Panel Z/V.
+5. Rerun seeds 42 and 456 in a new Gate-1B directory. Do not resume the
+   original Gate-1 checkpoints, and do not authorize Gate 2 until review.
+
 ### Step 2: local learnability screen
 
 - start from byte-identical physical baselines;

@@ -16,6 +16,7 @@ from .v42_geometry import identity_rotation_6d, rotation_6d_to_matrix
 @dataclass
 class V42TrajectoryOutput:
     com: Tensor
+    ballistic_com: Tensor
     rotation_6d: Tensor
     rotation: Tensor
     canonical_displacement: Tensor
@@ -108,7 +109,13 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
             input_mask[:, None].expand(-1, self.frames, -1),
             dim=2,
         )
-        com = ballistic_com + self.v42_com_head(pooled)
+        com_correction = self.v42_com_head(pooled)
+        # The first future frame is already determined very accurately by the
+        # observed finite-difference velocity. Learn contact corrections after
+        # H1 without allowing the decoder to damage that physical anchor.
+        com_correction = com_correction.clone()
+        com_correction[:, 0] = 0
+        com = ballistic_com + com_correction
         rotation_6d = self.rotation_head(pooled)
         rotation = rotation_6d_to_matrix(rotation_6d)
 
@@ -141,7 +148,8 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         rotated = torch.einsum("btni,btij->btnj", canonical_shape, rotation)
         position = com[:, :, None] + rotated
         return V42TrajectoryOutput(
-            com=com, rotation_6d=rotation_6d, rotation=rotation,
+            com=com, ballistic_com=ballistic_com,
+            rotation_6d=rotation_6d, rotation=rotation,
             canonical_displacement=displacement,
             canonical_shape=canonical_shape, position=position,
             physical_hidden=physical_hidden, local_hidden=local_hidden,

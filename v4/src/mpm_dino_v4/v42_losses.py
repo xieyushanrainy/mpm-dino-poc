@@ -7,7 +7,7 @@ from torch import Tensor
 from torch.nn import functional as F
 
 from mpm_dino_v2.deformation import edge_validity, gather_neighbours
-from .v42_geometry import CanonicalTargets, canonical_targets, rotation_geodesic
+from .v42_geometry import CanonicalTargets, canonical_targets, rotation_chordal
 from .v42_model import V42TrajectoryOutput
 
 
@@ -34,6 +34,7 @@ class V42Losses:
     com_acceleration: Tensor
     com_key: Tensor
     rotation: Tensor
+    rotation_key: Tensor
     rigid_fit: Tensor
     canonical: Tensor
     strain: Tensor
@@ -50,6 +51,7 @@ class V42GlobalLosses:
     com_acceleration: Tensor
     com_key: Tensor
     rotation: Tensor
+    rotation_key: Tensor
     rigid_fit: Tensor
 
 
@@ -94,11 +96,17 @@ def compute_v42_global_losses(
         [1.0 if family == "rigid" else 0.25 for family in batch["family"]],
         device=output.com.device, dtype=output.com.dtype,
     )[:, None]
-    rotation_angles = rotation_geodesic(output.rotation, targets.rotation)
+    rotation_errors = rotation_chordal(output.rotation, targets.rotation)
     rotation_mask = targets.valid_rotation & frame_valid
     rotation = (
-        rotation_angles * rotation_mask * family_weight
+        rotation_errors * rotation_mask * family_weight
     ).sum() / (rotation_mask * family_weight).sum().clamp_min(1)
+    key_rotation_mask = rotation_mask[:, key]
+    rotation_key = (
+        rotation_errors[:, key] * key_rotation_mask * family_weight
+    ).sum() / (
+        key_rotation_mask * family_weight
+    ).sum().clamp_min(1)
     rigid_objects = torch.tensor(
         [family == "rigid" for family in batch["family"]],
         device=output.com.device, dtype=torch.bool,
@@ -116,11 +124,12 @@ def compute_v42_global_losses(
     )
     total = (
         com_position + 0.25 * com_velocity + 0.10 * com_acceleration
-        + 0.25 * com_key + rotation + 0.25 * rigid_fit
+        + 0.25 * com_key + rotation + 0.25 * rotation_key
+        + 0.25 * rigid_fit
     )
     return V42GlobalLosses(
         total, com_position, com_velocity, com_acceleration, com_key,
-        rotation, rigid_fit,
+        rotation, rotation_key, rigid_fit,
     )
 
 
@@ -205,7 +214,8 @@ def compute_v42_losses(
         global_total + local_total, global_total, local_total,
         global_losses.com_position, global_losses.com_velocity,
         global_losses.com_acceleration, global_losses.com_key,
-        global_losses.rotation, global_losses.rigid_fit,
+        global_losses.rotation, global_losses.rotation_key,
+        global_losses.rigid_fit,
         canonical, strain, edge_length,
         local_velocity, rigid_zero,
     )

@@ -51,7 +51,147 @@ def gate1_scores(output, batch, targets):
         result[f"h{horizon}_rotation_rad"] = (
             rotation_error * rotation_valid
         ).sum() / rotation_valid.sum().clamp_min(1)
+        ballistic_error = torch.linalg.vector_norm(
+            output.ballistic_com[:, index] - targets.com[:, index], dim=-1,
+        )
+        result[f"h{horizon}_ballistic_com_nrmse"] = (
+            (ballistic_error / targets.radius) * valid
+        ).sum() / valid.sum().clamp_min(1)
+        identity = torch.eye(
+            3, device=output.rotation.device, dtype=output.rotation.dtype,
+        ).expand_as(output.rotation[:, index])
+        identity_error = rotation_geodesic(
+            identity, targets.rotation[:, index],
+        )
+        result[f"h{horizon}_identity_rotation_rad"] = (
+            identity_error * rotation_valid
+        ).sum() / rotation_valid.sum().clamp_min(1)
     return result
+
+
+@torch.no_grad()
+def write_gate1_validation_baselines(
+    model, loader, device, output_path, amp=False,
+):
+    """Write mandatory family/panel model-versus-physics comparisons."""
+    model.eval()
+    horizons = (1, 8, 16, 30, 40, 59)
+    accumulators = {}
+    for raw in loader:
+        batch = move(raw, device)
+        with torch.autocast(
+            device_type=device.type, dtype=torch.float16, enabled=amp,
+        ):
+            prediction = model(**{
+                key: batch[key] for key in MODEL_INPUT_KEYS
+            })
+            targets = canonical_targets(
+                batch["x1"], batch["target"], batch["input_mask"],
+                batch["target_mask"],
+            )
+        for sample in range(prediction.com.shape[0]):
+            family = batch["family"][sample]
+            panel = batch["panel"][sample]
+            group = accumulators.setdefault(
+                (family, panel), {"uids": set(), "horizons": {}},
+            )
+            group["uids"].add(batch["uid"][sample])
+            for horizon in horizons:
+                if horizon > prediction.com.shape[1]:
+                    continue
+                index = horizon - 1
+                valid = bool(batch["target_mask"][sample, index].any())
+                if not valid:
+                    continue
+                values = group["horizons"].setdefault(horizon, {
+                    "episodes": 0,
+                    "model_com_m_sum": 0.0,
+                    "ballistic_com_m_sum": 0.0,
+                    "model_com_nrmse_sum": 0.0,
+                    "ballistic_com_nrmse_sum": 0.0,
+                    "rotation_valid": 0,
+                    "model_rotation_rad_sum": 0.0,
+                    "identity_rotation_rad_sum": 0.0,
+                })
+                model_com = torch.linalg.vector_norm(
+                    prediction.com[sample, index] - targets.com[sample, index]
+                )
+                ballistic_com = torch.linalg.vector_norm(
+                    prediction.ballistic_com[sample, index]
+                    - targets.com[sample, index]
+                )
+                radius = targets.radius[sample]
+                values["episodes"] += 1
+                values["model_com_m_sum"] += float(model_com.cpu())
+                values["ballistic_com_m_sum"] += float(ballistic_com.cpu())
+                values["model_com_nrmse_sum"] += float(
+                    (model_com / radius).cpu()
+                )
+                values["ballistic_com_nrmse_sum"] += float(
+                    (ballistic_com / radius).cpu()
+                )
+                if bool(targets.valid_rotation[sample, index]):
+                    model_rotation = rotation_geodesic(
+                        prediction.rotation[sample, index],
+                        targets.rotation[sample, index],
+                    )
+                    identity_rotation = rotation_geodesic(
+                        torch.eye(
+                            3, device=device, dtype=prediction.rotation.dtype,
+                        ),
+                        targets.rotation[sample, index],
+                    )
+                    values["rotation_valid"] += 1
+                    values["model_rotation_rad_sum"] += float(
+                        model_rotation.cpu()
+                    )
+                    values["identity_rotation_rad_sum"] += float(
+                        identity_rotation.cpu()
+                    )
+    report = {
+        "schema": "v42_gate1b_validation_baselines_v1",
+        "split": "validation",
+        "test_used": False,
+        "comparisons": {
+            "com": "learned ballistic residual versus ballistic COM",
+            "rotation": "predicted rotation versus identity rotation",
+        },
+        "strata": {},
+    }
+    for (family, panel), group in sorted(accumulators.items()):
+        result = {
+            "uid_count": len(group["uids"]),
+            "uids": sorted(group["uids"]),
+            "horizons": {},
+        }
+        for horizon, values in sorted(group["horizons"].items()):
+            episodes = values.pop("episodes")
+            rotation_valid = values.pop("rotation_valid")
+            result["horizons"][f"h{horizon}"] = {
+                "episode_count": episodes,
+                "rotation_valid_count": rotation_valid,
+                "model_com_m": values["model_com_m_sum"] / episodes,
+                "ballistic_com_m": (
+                    values["ballistic_com_m_sum"] / episodes
+                ),
+                "model_com_nrmse": (
+                    values["model_com_nrmse_sum"] / episodes
+                ),
+                "ballistic_com_nrmse": (
+                    values["ballistic_com_nrmse_sum"] / episodes
+                ),
+                "model_rotation_rad": (
+                    values["model_rotation_rad_sum"] / rotation_valid
+                    if rotation_valid else None
+                ),
+                "identity_rotation_rad": (
+                    values["identity_rotation_rad_sum"] / rotation_valid
+                    if rotation_valid else None
+                ),
+            }
+        report["strata"][f"{family}/panel_{panel}"] = result
+    Path(output_path).write_text(json.dumps(report, indent=2) + "\n")
+    return report
 
 
 def run_gate1_epoch(
@@ -164,7 +304,8 @@ def train_v42_gate1(
     use_amp = bool(amp)
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
     config = {
-        "experiment": "v42_gate1_physical_com_rotation",
+        "experiment": "v42_gate1b_ballistic_anchor_chordal_rotation",
+        "model_contract_version": "gate1b_v1",
         "seed": seed, "device": device, "epochs": epochs,
         "draws_per_epoch": draws_per_epoch, "hidden_dim": hidden_dim,
         "blocks": blocks, "heads": heads, "dropout": dropout, "lr": lr,
@@ -183,8 +324,17 @@ def train_v42_gate1(
             },
             "rotation_weights": {
                 "rigid": 1.0, "soft_kabsch_gauge": 0.25,
+                "full_trajectory_chordal": 1.0,
+                "key_horizon_chordal": 0.25,
                 "rigid_fit": 0.25,
             },
+            "com_parameterization": (
+                "ballistic COM plus learned residual; residual exactly zero H1"
+            ),
+            "rotation_training_metric": (
+                "0.5 * squared Frobenius/chordal distance"
+            ),
+            "rotation_reporting_metric": "clamped geodesic angle radians",
             "key_horizons": [1, 8, 16, 30, 40, 59],
             "kabsch_degeneracy_ratio": 1e-3,
         },
@@ -206,7 +356,8 @@ def train_v42_gate1(
             last_path, map_location="cpu", weights_only=False,
         )
         immutable = (
-            "seed", "draws_per_epoch", "hidden_dim", "blocks", "heads",
+            "experiment", "model_contract_version", "seed",
+            "draws_per_epoch", "hidden_dim", "blocks", "heads",
             "dropout", "lr", "accumulation", "patience",
             "plateau_patience", "amp", "manifest_content_sha256",
         )
@@ -270,6 +421,15 @@ def train_v42_gate1(
             if stale >= patience:
                 break
     best_path = output / "best.pt"
+    best_state = torch.load(
+        best_path, map_location=device, weights_only=False,
+    )
+    model.load_state_dict(best_state["model"])
+    baseline_path = output / "VALIDATION_BASELINES.json"
+    write_gate1_validation_baselines(
+        model, validation_loader, torch.device(device),
+        baseline_path, use_amp,
+    )
     completion = {
         "status": "complete", "last_epoch": epoch,
         "best_selection": best,
@@ -282,9 +442,11 @@ def train_v42_gate1(
         "history_sha256": hashlib.sha256(
             (output / "history.jsonl").read_bytes()
         ).hexdigest(),
+        "validation_baselines_sha256": hashlib.sha256(
+            baseline_path.read_bytes()
+        ).hexdigest(),
     }
     (output / "RUN_COMPLETE.json").write_text(
         json.dumps(completion, indent=2) + "\n"
     )
     return best_path
-
