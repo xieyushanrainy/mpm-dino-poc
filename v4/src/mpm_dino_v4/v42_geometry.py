@@ -29,6 +29,27 @@ def identity_rotation_6d(*shape: int, device=None, dtype=None) -> Tensor:
     return value
 
 
+def rotation_vector_to_matrix(vector: Tensor) -> Tensor:
+    """Differentiable exponential map from axis-angle vectors to SO(3)."""
+    x, y, z = vector.unbind(-1)
+    zeros = torch.zeros_like(x)
+    skew = torch.stack((
+        zeros, -z, y,
+        z, zeros, -x,
+        -y, x, zeros,
+    ), dim=-1).reshape(*vector.shape[:-1], 3, 3)
+    angle = torch.linalg.vector_norm(vector, dim=-1)
+    first = torch.sinc(angle / torch.pi)
+    second = 0.5 * torch.sinc(angle / (2 * torch.pi)).square()
+    identity = torch.eye(
+        3, device=vector.device, dtype=vector.dtype,
+    ).expand(*vector.shape[:-1], 3, 3)
+    return (
+        identity + first[..., None, None] * skew
+        + second[..., None, None] * (skew @ skew)
+    )
+
+
 def rotation_geodesic(predicted: Tensor, target: Tensor) -> Tensor:
     relative = predicted.transpose(-1, -2) @ target
     cosine = ((relative.diagonal(dim1=-2, dim2=-1).sum(-1) - 1) / 2)

@@ -10,14 +10,16 @@ from .v41_model import (
     GeometryAwareRegionTokens, RegionTokenLocalAdapter,
     V41TrajectorySurrogate,
 )
-from .v42_geometry import identity_rotation_6d, rotation_6d_to_matrix
+from .v42_geometry import (
+    identity_rotation_6d, rotation_6d_to_matrix, rotation_vector_to_matrix,
+)
 
 
 @dataclass
 class V42TrajectoryOutput:
     com: Tensor
     ballistic_com: Tensor
-    rotation_6d: Tensor
+    rotation_representation: Tensor
     rotation: Tensor
     canonical_displacement: Tensor
     canonical_shape: Tensor
@@ -36,7 +38,7 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
     def __init__(
         self, local_mode="geometry", hidden_dim=128, blocks=4, heads=4,
         dropout=0.1, frames=59, local_trunk_alpha=0.0,
-        gradient_checkpointing=True,
+        gradient_checkpointing=True, rotation_parameterization="6d",
     ):
         if local_mode not in {"zero", "geometry", "real_dino"}:
             raise ValueError(local_mode)
@@ -47,13 +49,18 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         )
         self.local_mode = local_mode
         self.local_trunk_alpha = float(local_trunk_alpha)
+        if rotation_parameterization not in {"6d", "axis_angle"}:
+            raise ValueError(rotation_parameterization)
+        self.rotation_parameterization = rotation_parameterization
         self.v42_com_head = nn.Sequential(
             nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, hidden_dim),
             nn.SiLU(), nn.Linear(hidden_dim, 3),
         )
         self.rotation_head = nn.Sequential(
             nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, hidden_dim),
-            nn.SiLU(), nn.Linear(hidden_dim, 6),
+            nn.SiLU(), nn.Linear(
+                hidden_dim, 6 if rotation_parameterization == "6d" else 3
+            ),
         )
         # Geometry-only and visual conditions are architecture-identical.
         # Geometry-only supplies zero DINO while retaining the real validity
@@ -69,11 +76,14 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         nn.init.zeros_(self.v42_com_head[-1].weight)
         nn.init.zeros_(self.v42_com_head[-1].bias)
         nn.init.zeros_(self.rotation_head[-1].weight)
-        with torch.no_grad():
-            self.rotation_head[-1].bias.copy_(identity_rotation_6d(
-                device=self.rotation_head[-1].bias.device,
-                dtype=self.rotation_head[-1].bias.dtype,
-            ))
+        if rotation_parameterization == "6d":
+            with torch.no_grad():
+                self.rotation_head[-1].bias.copy_(identity_rotation_6d(
+                    device=self.rotation_head[-1].bias.device,
+                    dtype=self.rotation_head[-1].bias.dtype,
+                ))
+        else:
+            nn.init.zeros_(self.rotation_head[-1].bias)
         nn.init.zeros_(self.canonical_head[-1].weight)
         nn.init.zeros_(self.canonical_head[-1].bias)
 
@@ -116,8 +126,13 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         com_correction = com_correction.clone()
         com_correction[:, 0] = 0
         com = ballistic_com + com_correction
-        rotation_6d = self.rotation_head(pooled)
-        rotation = rotation_6d_to_matrix(rotation_6d)
+        rotation_representation = self.rotation_head(pooled)
+        if self.rotation_parameterization == "axis_angle":
+            rotation_representation = rotation_representation.clone()
+            rotation_representation[:, 0] = 0
+            rotation = rotation_vector_to_matrix(rotation_representation)
+        else:
+            rotation = rotation_6d_to_matrix(rotation_representation)
 
         # alpha=0 is an exact stop-gradient; intermediate alpha scales only
         # local-loss gradients while leaving the forward value unchanged.
@@ -149,7 +164,8 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         position = com[:, :, None] + rotated
         return V42TrajectoryOutput(
             com=com, ballistic_com=ballistic_com,
-            rotation_6d=rotation_6d, rotation=rotation,
+            rotation_representation=rotation_representation,
+            rotation=rotation,
             canonical_displacement=displacement,
             canonical_shape=canonical_shape, position=position,
             physical_hidden=physical_hidden, local_hidden=local_hidden,

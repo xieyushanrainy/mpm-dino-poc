@@ -35,6 +35,7 @@ class V42Losses:
     com_key: Tensor
     rotation: Tensor
     rotation_key: Tensor
+    rotation_event: Tensor
     rigid_fit: Tensor
     canonical: Tensor
     strain: Tensor
@@ -52,6 +53,7 @@ class V42GlobalLosses:
     com_key: Tensor
     rotation: Tensor
     rotation_key: Tensor
+    rotation_event: Tensor
     rigid_fit: Tensor
 
 
@@ -59,6 +61,7 @@ def compute_v42_global_losses(
     output: V42TrajectoryOutput,
     batch: dict,
     targets: CanonicalTargets | None = None,
+    rotation_frame_weights: Tensor | None = None,
     beta: float = 0.01,
 ) -> V42GlobalLosses:
     mask = batch["target_mask"]
@@ -107,6 +110,13 @@ def compute_v42_global_losses(
     ).sum() / (
         key_rotation_mask * family_weight
     ).sum().clamp_min(1)
+    if rotation_frame_weights is None:
+        rotation_event = rotation.new_zeros(())
+    else:
+        event_weight = rotation_frame_weights * rotation_mask * family_weight
+        rotation_event = (
+            rotation_errors * event_weight
+        ).sum() / event_weight.sum().clamp_min(1)
     rigid_objects = torch.tensor(
         [family == "rigid" for family in batch["family"]],
         device=output.com.device, dtype=torch.bool,
@@ -125,11 +135,11 @@ def compute_v42_global_losses(
     total = (
         com_position + 0.25 * com_velocity + 0.10 * com_acceleration
         + 0.25 * com_key + rotation + 0.25 * rotation_key
-        + 0.25 * rigid_fit
+        + 0.50 * rotation_event + 0.25 * rigid_fit
     )
     return V42GlobalLosses(
         total, com_position, com_velocity, com_acceleration, com_key,
-        rotation, rotation_key, rigid_fit,
+        rotation, rotation_key, rotation_event, rigid_fit,
     )
 
 
@@ -138,6 +148,7 @@ def compute_v42_losses(
     batch: dict,
     targets: CanonicalTargets | None = None,
     frame_weights: Tensor | None = None,
+    rotation_frame_weights: Tensor | None = None,
     beta: float = 0.01,
 ) -> V42Losses:
     mask = batch["target_mask"]
@@ -147,7 +158,8 @@ def compute_v42_losses(
         )
     radius = targets.radius
     global_losses = compute_v42_global_losses(
-        output, batch, targets=targets, beta=beta,
+        output, batch, targets=targets,
+        rotation_frame_weights=rotation_frame_weights, beta=beta,
     )
     rigid_objects = torch.tensor(
         [family == "rigid" for family in batch["family"]],
@@ -215,6 +227,7 @@ def compute_v42_losses(
         global_losses.com_position, global_losses.com_velocity,
         global_losses.com_acceleration, global_losses.com_key,
         global_losses.rotation, global_losses.rotation_key,
+        global_losses.rotation_event,
         global_losses.rigid_fit,
         canonical, strain, edge_length,
         local_velocity, rigid_zero,

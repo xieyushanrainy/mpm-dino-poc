@@ -16,6 +16,7 @@ from .v41_train import (
 from .v42_geometry import canonical_targets, rotation_geodesic
 from .v42_losses import compute_v42_global_losses
 from .v42_model import V42RotationAwareSurrogate
+from .v42_stages import derive_impact_stages
 
 
 GLOBAL_PREFIXES = (
@@ -149,9 +150,10 @@ def write_gate1_validation_baselines(
                         identity_rotation.cpu()
                     )
     report = {
-        "schema": "v42_gate1b_validation_baselines_v1",
+        "schema": "v42_gate1_validation_baselines_v2",
         "split": "validation",
         "test_used": False,
+        "rotation_parameterization": model.rotation_parameterization,
         "comparisons": {
             "com": "learned ballistic residual versus ballistic COM",
             "rotation": "predicted rotation versus identity rotation",
@@ -196,7 +198,7 @@ def write_gate1_validation_baselines(
 
 def run_gate1_epoch(
     model, loader, device, optimizer=None, accumulation=4,
-    amp=False, scaler=None, max_batches=None,
+    amp=False, scaler=None, max_batches=None, event_rotation=False,
 ):
     training = optimizer is not None
     model.train(training)
@@ -217,7 +219,19 @@ def run_gate1_epoch(
                     batch["x1"], batch["target"], batch["input_mask"],
                     batch["target_mask"],
                 )
-                loss = compute_v42_global_losses(output, batch, targets)
+                rotation_frame_weights = None
+                if event_rotation:
+                    stages = derive_impact_stages(
+                        batch["x1"], batch["target"], batch["input_mask"],
+                        batch["target_mask"], batch["neighbour_indices"],
+                        batch["neighbour_mask"], batch["rest_edge_lengths"],
+                        batch["dt"], batch["gravity"], batch["floor_z"],
+                    )
+                    # Stage index zero is observed x1; model outputs start H1.
+                    rotation_frame_weights = stages.weights[:, 1:].detach()
+                loss = compute_v42_global_losses(
+                    output, batch, targets, rotation_frame_weights,
+                )
             if training:
                 value = loss.total / accumulation
                 if scaler is not None:
@@ -269,7 +283,7 @@ def train_v42_gate1(
     root, manifest, output, seed, device="cuda", epochs=120,
     draws_per_epoch=40, hidden_dim=128, blocks=4, heads=4, dropout=0.1,
     lr=2e-4, accumulation=4, patience=20, plateau_patience=5,
-    amp=False, resume=True, max_batches=None,
+    amp=False, resume=True, max_batches=None, gate1c=False,
 ):
     seed_all(seed)
     output = Path(output)
@@ -292,6 +306,7 @@ def train_v42_gate1(
     model = V42RotationAwareSurrogate(
         local_mode="zero", hidden_dim=hidden_dim, blocks=blocks,
         heads=heads, dropout=dropout, frames=59,
+        rotation_parameterization="axis_angle" if gate1c else "6d",
     ).to(device)
     parameters = gate1_parameters(model)
     optimizer = torch.optim.AdamW(
@@ -304,8 +319,11 @@ def train_v42_gate1(
     use_amp = bool(amp)
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
     config = {
-        "experiment": "v42_gate1b_ballistic_anchor_chordal_rotation",
-        "model_contract_version": "gate1b_v1",
+        "experiment": (
+            "v42_gate1c_impact_axis_angle_rotation" if gate1c
+            else "v42_gate1b_ballistic_anchor_chordal_rotation"
+        ),
+        "model_contract_version": "gate1c_v1" if gate1c else "gate1b_v1",
         "seed": seed, "device": device, "epochs": epochs,
         "draws_per_epoch": draws_per_epoch, "hidden_dim": hidden_dim,
         "blocks": blocks, "heads": heads, "dropout": dropout, "lr": lr,
@@ -326,6 +344,7 @@ def train_v42_gate1(
                 "rigid": 1.0, "soft_kabsch_gauge": 0.25,
                 "full_trajectory_chordal": 1.0,
                 "key_horizon_chordal": 0.25,
+                "event_emphasized_chordal": 0.50 if gate1c else 0.0,
                 "rigid_fit": 0.25,
             },
             "com_parameterization": (
@@ -335,19 +354,36 @@ def train_v42_gate1(
                 "0.5 * squared Frobenius/chordal distance"
             ),
             "rotation_reporting_metric": "clamped geodesic angle radians",
+            "rotation_parameterization": (
+                "axis_angle_exp_map_with_exact_identity_H1" if gate1c
+                else "absolute_6d"
+            ),
+            "stage_metadata_is_model_input": False,
             "key_horizons": [1, 8, 16, 30, 40, 59],
             "kabsch_degeneracy_ratio": 1e-3,
         },
-        "selection": {
+        "selection": ({
+            "split": "validation",
+            "optimization_metric": "mean full-trajectory global loss",
+            "checkpoint_metric": "lowest global loss among eligible epochs",
+            "eligibility": {
+                "mean_h8_h16_h30_h40_h59_rotation_improvement_over_identity":
+                    "at least 1%",
+                "h59_rotation_relative_to_identity": "at most 1.10",
+            },
+            "test_used": False,
+        } if gate1c else {
             "split": "validation",
             "metric": "mean full-trajectory global loss",
             "test_used": False,
-        },
+        }),
     }
     (output / "config.json").write_text(
         json.dumps(config, indent=2) + "\n"
     )
-    best, stale, start_epoch = float("inf"), 0, 1
+    best, best_eligible = float("inf"), float("inf")
+    best_com_seen, stale, start_epoch = float("inf"), 0, 1
+    eligible_stale, has_eligible = 0, False
     last_path = output / "last.pt"
     if resume and last_path.exists() and not (
         output / "RUN_COMPLETE.json"
@@ -373,6 +409,10 @@ def train_v42_gate1(
         if use_amp and state.get("scaler"):
             scaler.load_state_dict(state["scaler"])
         best, stale = float(state["best"]), int(state["stale"])
+        best_eligible = float(state.get("best_eligible", float("inf")))
+        best_com_seen = float(state.get("best_com_seen", float("inf")))
+        eligible_stale = int(state.get("eligible_stale", 0))
+        has_eligible = bool(state.get("has_eligible", False))
         start_epoch = int(state["epoch"]) + 1
         sampler.epoch = int(state["sampler_epoch"])
         restore_rng_state(state["rng_state"])
@@ -384,19 +424,58 @@ def train_v42_gate1(
             train = run_gate1_epoch(
                 model, train_loader, torch.device(device), optimizer,
                 accumulation, use_amp, scaler, max_batches,
+                gate1c,
             )
             validation = run_gate1_epoch(
                 model, validation_loader, torch.device(device), None,
                 accumulation, use_amp, None, max_batches,
+                gate1c,
             )
             selection = validation["loss"]
             scheduler.step(selection)
             improved = selection < best
             stale = 0 if improved else stale + 1
             best = min(best, selection)
+            com_score = (
+                validation["loss_com_position"]
+                + 0.25 * validation["loss_com_velocity"]
+                + 0.10 * validation["loss_com_acceleration"]
+                + 0.25 * validation["loss_com_key"]
+            )
+            best_com_seen = min(best_com_seen, com_score)
+            post_horizons = (8, 16, 30, 40, 59)
+            model_rotation = sum(
+                validation[f"h{horizon}_rotation_rad"]
+                for horizon in post_horizons
+            ) / len(post_horizons)
+            identity_rotation = sum(
+                validation[f"h{horizon}_identity_rotation_rad"]
+                for horizon in post_horizons
+            ) / len(post_horizons)
+            identity_improvement = (
+                (identity_rotation - model_rotation)
+                / max(identity_rotation, 1e-12)
+            )
+            eligible = (
+                gate1c
+                and identity_improvement >= 0.01
+                and validation["h59_rotation_rad"]
+                <= 1.10 * validation["h59_identity_rotation_rad"]
+            )
+            eligible_improved = eligible and selection < best_eligible
+            if eligible_improved:
+                best_eligible = selection
+                eligible_stale = 0
+                has_eligible = True
+            elif has_eligible:
+                eligible_stale += 1
             record = {
                 "epoch": epoch, "train": train,
                 "validation": validation, "selection": selection,
+                "checkpoint_eligible": eligible if gate1c else True,
+                "identity_improvement_fraction": identity_improvement,
+                "com_composite": com_score,
+                "eligible_stale": eligible_stale if gate1c else None,
                 "lr": optimizer.param_groups[0]["lr"],
                 "seconds": time.perf_counter() - started,
             }
@@ -409,18 +488,31 @@ def train_v42_gate1(
                 "config": config, "epoch": epoch, "train": train,
                 "validation": validation, "selection": selection,
                 "best": best, "stale": stale, "sampler_epoch": sampler.epoch,
+                "best_eligible": best_eligible,
+                "best_com_seen": best_com_seen,
+                "eligible_stale": eligible_stale,
+                "has_eligible": has_eligible,
                 "rng_state": rng_state(),
             }
             atomic_torch_save(state, output / "last.pt")
             if improved:
+                atomic_torch_save(state, output / "best_total.pt")
+            if (not gate1c and improved) or eligible_improved:
                 atomic_torch_save(state, output / "best.pt")
             print(
                 f"epoch={epoch:03d} global={selection:.6g} "
+                f"eligible={eligible if gate1c else True} "
                 f"stale={stale}", flush=True,
             )
-            if stale >= patience:
+            if (
+                (not gate1c and stale >= patience)
+                or (gate1c and has_eligible and eligible_stale >= patience)
+            ):
                 break
-    best_path = output / "best.pt"
+    screen_passed = (output / "best.pt").exists()
+    best_path = (
+        output / "best.pt" if screen_passed else output / "best_total.pt"
+    )
     best_state = torch.load(
         best_path, map_location=device, weights_only=False,
     )
@@ -433,8 +525,17 @@ def train_v42_gate1(
     completion = {
         "status": "complete", "last_epoch": epoch,
         "best_selection": best,
-        "best_checkpoint_sha256": hashlib.sha256(
-            best_path.read_bytes()
+        "identity_checkpoint_screen_passed": (
+            screen_passed if gate1c else None
+        ),
+        "best_eligible_selection": (
+            best_eligible if screen_passed and gate1c else None
+        ),
+        "reported_checkpoint": best_path.name,
+        "reported_checkpoint_sha256": hashlib.sha256(
+            best_path.read_bytes()).hexdigest(),
+        "best_total_checkpoint_sha256": hashlib.sha256(
+            (output / "best_total.pt").read_bytes()
         ).hexdigest(),
         "last_checkpoint_sha256": hashlib.sha256(
             (output / "last.pt").read_bytes()

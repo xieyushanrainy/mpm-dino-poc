@@ -62,3 +62,38 @@ PYTHONPATH=v2/src:v3/src:v4/src python -u v42/run_gate1.py \
 
 This command does not launch Gate 2. Gate-1 checkpoints must be reviewed
 before the protected local screen starts.
+
+After Gate 1B, run the validation-only rotation audit without loading a trained
+model or touching test data:
+
+```bash
+PYTHONPATH=v4/src python v42/audit_rotation_baselines.py
+```
+
+It compares identity with a constant-angular-velocity baseline inferred by
+proper Kabsch alignment from `x0` to `x1`, reports target rotation vectors and
+impact-time angular changes, and checks whether Kabsch conditioning or
+deformation residuals explain rotation instability.
+
+The audit found no useful observed angular-velocity baseline. Gate 1C therefore
+predicts an axis-angle rotation around identity, anchors H1 to exact identity,
+and adds detached event-emphasized rotation supervision. Stage labels remain
+training metadata and are never model inputs. A checkpoint is eligible only if
+its mean H8/H16/H30/H40/H59 rotation error improves identity by at least 1% and
+its H59 error is no more than 10% worse than identity.
+
+Run Gate 1C on the lab server:
+
+```bash
+PYTHONPATH=v2/src:v3/src:v4/src python -u v42/run_gate1c.py \
+  --device cuda \
+  --seeds 42 456 \
+  --epochs 120 \
+  --draws 40 \
+  --patience 20 \
+  --plateau-patience 5 \
+  --no-amp \
+  --runs v42/runs/gate1c_seed42_456
+```
+
+This command runs Gate 1C only. It does not start Gate 2.

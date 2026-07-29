@@ -317,6 +317,32 @@ hundredths of a degree. Before Gate 2:
 5. Rerun seeds 42 and 456 in a new Gate-1B directory. Do not resume the
    original Gate-1 checkpoints, and do not authorize Gate 2 until review.
 
+### Validation-only rotation audit after Gate 1B
+
+The approved audit compared identity with constant angular velocity inferred
+by proper Kabsch alignment from `x0` to `x1`. The maximum observed-step
+rotation was only `0.000056` degrees, and constant-angular extrapolation
+improved the mean identity error by only `0.003%`. It is therefore effectively
+the identity baseline and does not justify a residual-over-observed-angular-
+velocity architecture for the current dataset.
+
+No validation target frames were below the Kabsch singular-ratio threshold of
+`1e-3`. Soft-object target instability is therefore not explained by rank
+degeneracy. Rotation is generated primarily at floor impact, after the
+observed input frames. The next rotation experiment must model impact-induced
+rotation from object/contact geometry and must use an explicit validation
+constraint requiring improvement over identity; combined global loss alone is
+not an acceptable checkpoint selector.
+
+Gate 1C implements this as an axis-angle exponential-map head around identity.
+H1 is hard-anchored to identity. Full-trajectory and key-horizon chordal losses
+remain, with an additional `0.50` event-emphasized chordal term using detached
+Gate-0 stage weights. The stages are not inference inputs. An epoch is eligible
+for `best.pt` only when mean H8/H16/H30/H40/H59 geodesic error improves identity
+by at least `1%` and H59 error is at most `1.10` times identity. If no epoch
+passes, only `best_total.pt` is retained for diagnosis and Gate 2 remains
+unauthorized.
+
 ### Step 2: local learnability screen
 
 - start from byte-identical physical baselines;

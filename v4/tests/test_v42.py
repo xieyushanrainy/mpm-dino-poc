@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import torch
 
 from mpm_dino_v2.graph import build_mutual_knn_graph
 from mpm_dino_v4.v42_geometry import (
     canonical_targets, identity_rotation_6d, rotation_6d_to_matrix,
-    rotation_chordal,
+    rotation_chordal, rotation_vector_to_matrix,
 )
 from mpm_dino_v4.v42_losses import compute_v42_losses
 from mpm_dino_v4.v42_model import V42RotationAwareSurrogate
@@ -15,6 +16,10 @@ from mpm_dino_v4.v42_stages import (
     ImpactStage, derive_impact_stages, lowest_active_mean_gap,
 )
 from mpm_dino_v4.v42_train import gate1_parameters
+from mpm_dino_v4.v42_rotation_audit import (
+    constant_angular_rotation, geodesic_error, proper_kabsch,
+    rotation_from_vector,
+)
 
 
 def inputs(n=16, frames=7):
@@ -65,6 +70,39 @@ def test_chordal_rotation_loss_is_zero_and_has_no_geodesic_floor():
     assert torch.equal(loss, torch.zeros_like(loss))
 
 
+def test_axis_angle_exponential_is_proper_and_differentiable():
+    vector = torch.tensor(
+        [[0.1, -0.2, 0.3], [0.0, 0.0, 0.0]], requires_grad=True,
+    )
+    matrix = rotation_vector_to_matrix(vector)
+    identity = torch.eye(3).expand(2, -1, -1)
+    assert torch.allclose(
+        matrix.transpose(-1, -2) @ matrix, identity, atol=1e-6,
+    )
+    assert torch.allclose(torch.linalg.det(matrix), torch.ones(2), atol=1e-6)
+    matrix.square().sum().backward()
+    assert vector.grad is not None
+    assert torch.isfinite(vector.grad).all()
+
+
+def test_constant_angular_baseline_extrapolates_observed_rotation():
+    source = np.array([
+        [-1.0, -0.5, 0.2], [0.8, -0.3, 0.1],
+        [0.4, 1.1, -0.2], [-0.2, 0.3, 1.0],
+    ])
+    step = rotation_from_vector(np.array([0.0, 0.0, 0.1]))
+    observed = source @ step
+    recovered, _, ratio = proper_kabsch(
+        source, observed, np.ones(len(source), dtype=bool)
+    )
+    assert ratio > 1e-3
+    assert geodesic_error(recovered, step) < 1e-7
+    expected = rotation_from_vector(np.array([0.0, 0.0, 0.8]))
+    assert geodesic_error(
+        constant_angular_rotation(recovered, 8), expected
+    ) < 1e-7
+
+
 def test_kabsch_canonical_target_removes_rigid_motion():
     sample = inputs()
     target = rigid_trajectory(sample["x1"], 7)
@@ -106,6 +144,19 @@ def test_v42_reconstruction_and_protected_local_gradient():
     assert all(
         parameter.grad is None or torch.count_nonzero(parameter.grad) == 0
         for parameter in model.blocks.parameters()
+    )
+
+
+def test_gate1c_axis_angle_head_has_exact_identity_h1():
+    sample = inputs(frames=5)
+    model = V42RotationAwareSurrogate(
+        hidden_dim=32, blocks=1, heads=4, dropout=0, frames=5,
+        gradient_checkpointing=False, rotation_parameterization="axis_angle",
+    )
+    output = model(**sample)
+    assert output.rotation_representation.shape == (1, 5, 3)
+    assert torch.equal(
+        output.rotation[:, 0], torch.eye(3).reshape(1, 3, 3),
     )
 
 
