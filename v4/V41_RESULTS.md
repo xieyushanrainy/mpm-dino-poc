@@ -297,3 +297,65 @@ Phase 1 consequently fails the inference-dependence criterion and supports
 proceeding to a COM-normalized, local-shape-only experiment. The complete
 diagnostic is documented in
 [`../v41/runs/track_b_split_region_cap100_p15_fp32/analysis_20260728_fixed_weight_dino/RESULTS.md`](../v41/runs/track_b_split_region_cap100_p15_fp32/analysis_20260728_fixed_weight_dino/RESULTS.md).
+
+## COM-normalized local-shape Phase 2
+
+Phase 2 trained physical-only, geometry-token, real-DINO and point-shuffled
+conditions for seeds 42 and 456 using a 75% soft/25% rigid mixture. Future COM
+was used only to construct centre-relative supervision; world-position and COM
+losses were absent. All eight runs are complete, finite, hash-valid, guarded,
+and correctly matched.
+
+The experiment fails its screening criteria. At soft H30, real-DINO shape RMSE
+is 5.960358 mm versus 5.960354 mm for geometry tokens and 5.960358 mm for
+point-shuffled. At H40 the corresponding values are 6.598234, 6.598228 and
+6.598234 mm. Relative real-versus-geometry effects are slightly negative and
+approximately `0.0001%`, far below the predeclared 5% threshold. Edge-vector
+and normalized strain errors are also indistinguishable.
+
+Predicted local RMS is only 0.009–0.013 mm for both soft and rigid objects,
+showing a family-independent near-zero local solution. Fixed-weight zeroing of
+DINO changes the local output by only 10–14 nm; point shuffling changes it by
+less than 0.4 nm. Phase 2 therefore also fails inference dependence.
+
+The rigid controls expose an additional metric problem: subtracting COM does
+not remove global rotation. Rigid centre-relative point RMSE reaches 31–42 mm
+while strain stays near zero. Future deformation analysis should use Kabsch-
+aligned residuals and strain rather than treating centre-relative point error
+as pure deformation.
+
+Adding seed 123 to this exact experiment is not justified. The next useful
+step is a rotation-invariant audit of ground-truth deformation magnitude and
+observability by soft UID and horizon.
+
+The full Phase-2 report is
+[`../v41/runs/local_shape_phase2_seed42_456/analysis_20260728/RESULTS.md`](../v41/runs/local_shape_phase2_seed42_456/analysis_20260728/RESULTS.md).
+
+## Ground-truth deformation-signal audit
+
+A rotation-invariant audit confirms that the Phase-2 failure cannot be
+explained by a complete absence of deformation in the dataset. Soft-body H1
+deformation is effectively zero, but later Kabsch-aligned residual and edge
+strain are thousands of times above the rigid Panel-Z numerical floor.
+
+The qualification is that the signal is small and heterogeneous at the main
+medium horizons. Validation soft-body Kabsch deformation is 0.695% of object
+radius at H30 and 1.075% at H40; only 1/5 and 2/5 validation soft UIDs exceed
+1%, respectively. Test H30/H40 means are 0.852% and 0.768%. In contrast, the
+training mean is 2.905% at H30 and 3.272% at H40. Horizons are non-monotonic
+because impact and recovery occur at different times across episodes.
+
+Phase 2's predicted local RMS of 0.009--0.013 mm is nevertheless about
+350--750 times smaller than the 4.5--7.0 mm of ground-truth
+rotation-invariant deformation at validation H30/H40. The local branch learned
+almost none of the available signal, while the broad sampler and small
+signal-to-object-scale ratio made its near-zero solution attractive.
+
+The appropriate next screening experiment is therefore a
+training/validation-only deformation-stratified local task using Kabsch/strain
+targets, rigid zero-deformation controls, and a zero-prediction baseline. Test
+objects must not be used to construct that curriculum.
+
+The complete audit, raw per-frame metrics, uncertainty, and statistical
+fallacy scan are in
+[`../v41/dataset/analysis_deformation_signal_20260728/RESULTS.md`](../v41/dataset/analysis_deformation_signal_20260728/RESULTS.md).
