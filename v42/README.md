@@ -153,3 +153,50 @@ PYTHONPATH=v2/src:v3/src:v4/src python -u v42/run_gate1e.py \
 ```
 
 Gate 1E does not launch Gate 2.
+
+Gate 1E produced a small overall improvement but did not pass the required
+per-stratum identity screen. Gate 1F keeps the Gate-1B COM/trunk protected and
+compares two contact-driven rotation formulations:
+
+- `absolute`: predicts an absolute axis-angle residual multiplied by a
+  cumulative, inference-time contact hazard. This tests whether Gate-1E's
+  recurrent integration drift is the main problem.
+- `impulse`: predicts contact-gated angular-velocity impulses, applies fixed
+  damping `rho=0.95`, and integrates them through time.
+
+Both variants infer contact probability and the contacting reference region
+from detached physical point features, normalized reference geometry,
+ballistic floor gap and the observed finite-difference velocity. Ground-truth
+contact stages and lowest-four contact patches are detached auxiliary targets
+for training only; they are never model inputs.
+
+Gate 1F retains full-trajectory chordal, key-horizon, event and rigid-fit
+losses. It adds class-balanced contact-onset BCE (`0.25`) and a normalized
+contact-point Huber loss (`0.10`). The impulse variant also retains the
+angular-velocity (`0.50`) and angular-acceleration (`0.25`) objectives.
+
+Checkpoint selection uses rigid rotation-active frames, defined before
+training as target rotation of at least `0.05 rad`. Eligibility requires both
+rigid Panel Z and Panel V to improve identity on active frames, at least `1%`
+pooled active-frame improvement, predicted rotation no greater than `0.01 rad`
+on inactive frames, and the existing H59 `1.10x` identity guard. Soft-body
+results remain a reported safety diagnostic rather than a Gate-1F promotion
+criterion.
+
+Run both Gate 1F variants on the lab server:
+
+```bash
+PYTHONPATH=v2/src:v3/src:v4/src python -u v42/run_gate1f.py \
+  --device cuda \
+  --variants absolute impulse \
+  --seeds 42 456 \
+  --epochs 120 \
+  --draws 40 \
+  --patience 20 \
+  --plateau-patience 5 \
+  --min-eligible-epoch 60 \
+  --gate1b-root v42/run/gate1b_seed42_456 \
+  --runs v42/runs/gate1f_seed42_456
+```
+
+This runner starts Gate 1F only. It does not start Gate 2.

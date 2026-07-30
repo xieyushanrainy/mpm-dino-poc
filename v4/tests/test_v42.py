@@ -17,7 +17,7 @@ from mpm_dino_v4.v42_stages import (
 )
 from mpm_dino_v4.v42_train import gate1_parameters
 from mpm_dino_v4.v42_gate1d_train import (
-    identity_screen, rotation_parameters,
+    gate1f_screen, identity_screen, rotation_parameters,
 )
 from mpm_dino_v4.v42_rotation_audit import (
     constant_angular_rotation, geodesic_error, proper_kabsch,
@@ -216,6 +216,80 @@ def test_gate1e_integrates_angular_velocity_and_anchors_h1():
     )
 
 
+def test_gate1f_absolute_contact_gate_is_inference_only_and_anchors_h1():
+    sample = inputs(frames=5)
+    model = V42RotationAwareSurrogate(
+        hidden_dim=32, blocks=1, heads=4, dropout=0, frames=5,
+        gradient_checkpointing=False, rotation_parameterization="axis_angle",
+        rotation_attention=True, contact_rotation_mode="absolute",
+    )
+    with torch.no_grad():
+        model.rotation_head[-1].bias.copy_(torch.tensor([0.0, 0.0, 0.2]))
+        model.rotation_contact_head[-1].bias.fill_(-40)
+    closed = model(**sample)
+    assert closed.contact_probability.shape == (1, 5)
+    assert closed.contact_point.shape == (1, 5, 3)
+    assert torch.equal(closed.contact_probability[:, 0], torch.zeros(1))
+    assert torch.equal(
+        closed.rotation[:, 0], torch.eye(3).reshape(1, 3, 3),
+    )
+    assert torch.allclose(
+        closed.rotation, torch.eye(3).reshape(1, 1, 3, 3), atol=1e-6,
+    )
+    with torch.no_grad():
+        model.rotation_contact_head[-1].bias.fill_(40)
+    opened = model(**sample)
+    assert not torch.allclose(
+        opened.rotation[:, -1], torch.eye(3).reshape(1, 3, 3),
+    )
+    assert torch.allclose(
+        torch.linalg.det(opened.rotation), torch.ones(1, 5), atol=1e-6,
+    )
+
+
+def test_gate1f_impulse_uses_damped_recurrence_and_protected_gradient():
+    sample = inputs(frames=5)
+    model = V42RotationAwareSurrogate(
+        hidden_dim=32, blocks=1, heads=4, dropout=0, frames=5,
+        gradient_checkpointing=False, rotation_parameterization="axis_angle",
+        rotation_attention=True, contact_rotation_mode="impulse",
+        angular_damping=0.8,
+    )
+    with torch.no_grad():
+        model.rotation_head[-1].bias.copy_(torch.tensor([0.0, 0.0, 0.1]))
+        model.rotation_contact_head[-1].bias.fill_(40)
+    output = model(**sample)
+    assert output.angular_velocity is not None
+    assert output.angular_velocity_change is not None
+    assert torch.equal(
+        output.angular_velocity[:, 0], torch.zeros(1, 3),
+    )
+    assert torch.allclose(
+        output.angular_velocity[:, 2],
+        0.8 * output.angular_velocity[:, 1]
+        + output.angular_velocity_change[:, 2],
+        atol=1e-6,
+    )
+    model.zero_grad(set_to_none=True)
+    (
+        output.rotation[:, 1:].square().sum()
+        + output.contact_probability[:, 1:].sum()
+        + output.contact_point.square().sum()
+    ).backward()
+    assert any(
+        parameter.grad is not None
+        for parameter in rotation_parameters(model)
+    )
+    assert all(
+        parameter.grad is None
+        for parameter in model.blocks.parameters()
+    )
+    assert all(
+        parameter.grad is None
+        for parameter in model.v42_com_head.parameters()
+    )
+
+
 def test_gate1d_identity_screen_requires_every_stratum():
     strata = {}
     for group in ("rigid/panel_Z", "rigid/panel_V", "soft_body/panel_Z"):
@@ -231,6 +305,29 @@ def test_gate1d_identity_screen_requires_every_stratum():
     assert passed
     strata["soft_body/panel_Z"]["h30"]["model_rotation_rad"] = 2.0
     passed, _ = identity_screen({"strata": strata})
+    assert not passed
+
+
+def test_gate1f_screen_separates_active_learning_and_inactive_safety():
+    validation = {"activity": {}, "strata": {}}
+    for group in ("rigid/panel_Z", "rigid/panel_V"):
+        validation["activity"][group] = {
+            "active_model_rad": 0.08, "active_identity_rad": 0.10,
+            "active_count": 10, "inactive_prediction_rad": 0.005,
+            "inactive_count": 10,
+        }
+        validation["strata"][group] = {
+            "h59": {
+                "model_rotation_rad": 0.09,
+                "identity_rotation_rad": 0.10,
+            }
+        }
+    passed, _ = gate1f_screen(validation)
+    assert passed
+    validation["activity"]["rigid/panel_Z"][
+        "inactive_prediction_rad"
+    ] = 0.02
+    passed, _ = gate1f_screen(validation)
     assert not passed
 
 

@@ -19,13 +19,14 @@ from .v42_geometry import (
 )
 from .v42_losses import compute_v42_global_losses
 from .v42_model import V42RotationAwareSurrogate
-from .v42_stages import derive_impact_stages
+from .v42_stages import ImpactStage, derive_impact_stages
 from .v42_train import write_gate1_validation_baselines
 
 
 ROTATION_PREFIXES = (
     "rotation_contact_projection.", "rotation_attention.",
-    "rotation_adapter.", "rotation_head.",
+    "rotation_adapter.", "rotation_head.", "rotation_contact_head.",
+    "rotation_contact_score.",
 )
 PROTECTED_PREFIXES = (
     "initial_node.", "initial_graph.", "time_projection.", "token.",
@@ -33,6 +34,8 @@ PROTECTED_PREFIXES = (
 )
 HORIZONS = (1, 8, 16, 30, 40, 59)
 POST_CONTACT_HORIZONS = (8, 16, 30, 40, 59)
+ACTIVE_ROTATION_RAD = 0.05
+INACTIVE_ROTATION_RAD = 0.01
 
 
 def rotation_parameters(model):
@@ -50,6 +53,9 @@ def set_rotation_training_mode(model, training):
         model.rotation_attention.train()
         model.rotation_adapter.train()
         model.rotation_head.train()
+        if model.contact_rotation_mode is not None:
+            model.rotation_contact_head.train()
+            model.rotation_contact_score.train()
 
 
 def protected_snapshot(model):
@@ -180,6 +186,73 @@ def _finalize_metrics(metrics):
     return result
 
 
+def _rotation_activity_metrics(output, batch, targets):
+    result = {}
+    identity = torch.eye(
+        3, device=output.rotation.device, dtype=output.rotation.dtype,
+    )
+    for sample in range(output.rotation.shape[0]):
+        group = f"{batch['family'][sample]}/panel_{batch['panel'][sample]}"
+        item = result.setdefault(group, {
+            "active_model_sum": 0.0, "active_identity_sum": 0.0,
+            "active_count": 0, "inactive_prediction_sum": 0.0,
+            "inactive_count": 0,
+        })
+        valid = (
+            batch["target_mask"][sample].any(1)
+            & targets.valid_rotation[sample]
+        )
+        target_magnitude = rotation_geodesic(
+            identity, targets.rotation[sample]
+        )
+        model_error = rotation_geodesic(
+            output.rotation[sample], targets.rotation[sample]
+        )
+        prediction_magnitude = rotation_geodesic(
+            identity, output.rotation[sample]
+        )
+        active = valid & target_magnitude.ge(ACTIVE_ROTATION_RAD)
+        inactive = valid & target_magnitude.le(INACTIVE_ROTATION_RAD)
+        item["active_model_sum"] += float(model_error[active].sum().cpu())
+        item["active_identity_sum"] += float(
+            target_magnitude[active].sum().cpu()
+        )
+        item["active_count"] += int(active.sum())
+        item["inactive_prediction_sum"] += float(
+            prediction_magnitude[inactive].sum().cpu()
+        )
+        item["inactive_count"] += int(inactive.sum())
+    return result
+
+
+def _merge_activity(total, update):
+    for group, values in update.items():
+        item = total.setdefault(group, {key: 0 for key in values})
+        for key, value in values.items():
+            item[key] += value
+
+
+def _finalize_activity(metrics):
+    result = {}
+    for group, values in sorted(metrics.items()):
+        active_count = values["active_count"]
+        inactive_count = values["inactive_count"]
+        result[group] = {
+            "active_model_rad": (
+                values["active_model_sum"] / max(active_count, 1)
+            ),
+            "active_identity_rad": (
+                values["active_identity_sum"] / max(active_count, 1)
+            ),
+            "active_count": active_count,
+            "inactive_prediction_rad": (
+                values["inactive_prediction_sum"] / max(inactive_count, 1)
+            ),
+            "inactive_count": inactive_count,
+        }
+    return result
+
+
 def angular_dynamics_losses(output, batch, targets, frame_weights):
     if output.angular_velocity is None:
         zero = output.rotation.new_zeros(())
@@ -234,16 +307,63 @@ def angular_dynamics_losses(output, batch, targets, frame_weights):
     return velocity_loss, acceleration_loss
 
 
+def gate1f_auxiliary_losses(output, batch, targets, stages):
+    """Training-only contact supervision for the inference-time contact gate."""
+    if output.contact_probability is None or output.contact_point is None:
+        zero = output.rotation.new_zeros(())
+        return zero, zero
+    labels = stages.labels[:, 1:]
+    target_contact = labels.eq(int(ImpactStage.CONTACT_ONSET))
+    known_contact = stages.contact_onset.ge(0)[:, None]
+    valid_frames = batch["target_mask"].any(2) & known_contact
+    positive = (target_contact & valid_frames).sum(1, keepdim=True).clamp_min(1)
+    negative = ((~target_contact) & valid_frames).sum(
+        1, keepdim=True
+    ).clamp_min(1)
+    balanced = torch.where(
+        target_contact, 0.5 / positive, 0.5 / negative
+    ) * valid_frames
+    contact = F.binary_cross_entropy(
+        output.contact_probability.clamp(1e-6, 1 - 1e-6),
+        target_contact.to(output.rotation.dtype), reduction="none",
+    )
+    contact = (contact * balanced).sum() / balanced.sum().clamp_min(1e-8)
+
+    # Persistent point identities let the lowest target points identify the
+    # contacting reference region without passing future positions to forward.
+    count = min(4, batch["target"].shape[2])
+    gaps = batch["target"][..., 2].masked_fill(
+        ~batch["target_mask"], torch.inf
+    )
+    indices = gaps.topk(count, dim=2, largest=False).indices
+    reference = targets.reference_shape[:, None].expand(
+        -1, batch["target"].shape[1], -1, -1
+    )
+    contact_reference = torch.gather(
+        reference, 2, indices[..., None].expand(-1, -1, -1, 3)
+    ).mean(2)
+    point_mask = target_contact & valid_frames
+    point = F.smooth_l1_loss(
+        (output.contact_point - contact_reference)
+        / targets.radius[:, None, None],
+        torch.zeros_like(output.contact_point), reduction="none", beta=0.01,
+    ).mean(-1)
+    point = (
+        point * point_mask
+    ).sum() / point_mask.sum().clamp_min(1)
+    return contact, point
+
+
 def run_rotation_epoch(
     model, loader, device, optimizer=None, accumulation=4,
-    max_batches=None, angular_dynamics=False,
+    max_batches=None, angular_dynamics=False, contact_rotation_mode=None,
 ):
     training = optimizer is not None
     set_rotation_training_mode(model, training)
     parameters = rotation_parameters(model)
     if training:
         optimizer.zero_grad(set_to_none=True)
-    totals, batches, metrics = {}, 0, {}
+    totals, batches, metrics, activity = {}, 0, {}, {}
     with torch.enable_grad() if training else torch.no_grad():
         for raw in loader:
             batch = move(raw, device)
@@ -266,12 +386,18 @@ def run_rotation_epoch(
             velocity_loss, acceleration_loss = angular_dynamics_losses(
                 output, batch, targets, stages.weights[:, 1:].detach(),
             )
+            contact_loss, contact_point_loss = gate1f_auxiliary_losses(
+                output, batch, targets, stages
+            )
             objective = (
                 losses.rotation + 0.25 * losses.rotation_key
                 + 0.50 * losses.rotation_event
                 + 0.25 * losses.rigid_fit
                 + (0.50 * velocity_loss + 0.25 * acceleration_loss
-                   if angular_dynamics else 0)
+                   if angular_dynamics
+                   or contact_rotation_mode == "impulse" else 0)
+                + (0.25 * contact_loss + 0.10 * contact_point_loss
+                   if contact_rotation_mode is not None else 0)
             )
             if training:
                 (objective / accumulation).backward()
@@ -287,12 +413,17 @@ def run_rotation_epoch(
                 "rigid_fit": losses.rigid_fit,
                 "angular_velocity": velocity_loss,
                 "angular_acceleration": acceleration_loss,
+                "contact": contact_loss,
+                "contact_point": contact_point_loss,
             }
             for key, value in values.items():
                 totals[key] = totals.get(key, 0.0) + float(
                     value.detach().cpu()
                 )
             _merge_metrics(metrics, _rotation_metrics(output, batch, targets))
+            _merge_activity(
+                activity, _rotation_activity_metrics(output, batch, targets)
+            )
             batches += 1
             if max_batches and batches >= max_batches:
                 break
@@ -303,6 +434,7 @@ def run_rotation_epoch(
     return {
         **{key: value / max(batches, 1) for key, value in totals.items()},
         "strata": _finalize_metrics(metrics),
+        "activity": _finalize_activity(activity),
     }
 
 
@@ -351,12 +483,61 @@ def identity_screen(validation):
     }
 
 
+def gate1f_screen(validation):
+    """Active-frame learnability plus inactive/H59 safety for rigid panels."""
+    required = ("rigid/panel_Z", "rigid/panel_V")
+    activity, strata = validation["activity"], validation["strata"]
+    if any(group not in activity or group not in strata for group in required):
+        return False, {"reason": "missing required rigid validation stratum"}
+    details, model_sum, identity_sum, active_count = {}, 0.0, 0.0, 0
+    passed = True
+    for group in required:
+        item = activity[group]
+        has_active = item["active_count"] > 0
+        active_non_regression = (
+            has_active
+            and item["active_model_rad"] <= item["active_identity_rad"]
+        )
+        inactive_safe = (
+            item["inactive_count"] == 0
+            or item["inactive_prediction_rad"] <= INACTIVE_ROTATION_RAD
+        )
+        h59_safe = (
+            strata[group]["h59"]["model_rotation_rad"]
+            <= 1.10 * strata[group]["h59"]["identity_rotation_rad"]
+        )
+        passed = passed and active_non_regression and inactive_safe and h59_safe
+        count = item["active_count"]
+        model_sum += item["active_model_rad"] * count
+        identity_sum += item["active_identity_rad"] * count
+        active_count += count
+        details[group] = {
+            **item, "active_non_regression": active_non_regression,
+            "inactive_safe": inactive_safe, "h59_safe": h59_safe,
+        }
+    improvement = (
+        (identity_sum - model_sum) / max(identity_sum, 1e-12)
+    )
+    passed = passed and active_count > 0 and improvement >= 0.01
+    return passed, {
+        "active_improvement_fraction": improvement,
+        "active_count": active_count,
+        "active_model_rad": model_sum / max(active_count, 1),
+        "strata": details,
+    }
+
+
 def train_v42_gate1d(
     root, manifest, gate1b_checkpoint, output, seed, device="cuda",
     epochs=120, draws_per_epoch=40, lr=2e-4, accumulation=4,
     patience=20, plateau_patience=5, min_eligible_epoch=60,
     resume=True, max_batches=None, angular_dynamics=False,
+    contact_rotation_mode=None, angular_damping=0.95,
 ):
+    if contact_rotation_mode not in {None, "absolute", "impulse"}:
+        raise ValueError(contact_rotation_mode)
+    if angular_dynamics and contact_rotation_mode is not None:
+        raise ValueError("legacy and contact rotation dynamics are exclusive")
     seed_all(seed)
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
@@ -386,6 +567,8 @@ def train_v42_gate1d(
         dropout=source_config["dropout"], frames=59,
         rotation_parameterization="axis_angle", rotation_attention=True,
         rotation_dynamics=angular_dynamics,
+        contact_rotation_mode=contact_rotation_mode,
+        angular_damping=angular_damping,
     ).to(device)
     source_state = load_gate1b_source(model, source_checkpoint)
     protected = protected_snapshot(model)
@@ -401,11 +584,16 @@ def train_v42_gate1d(
     )
     config = {
         "experiment": (
-            "v42_gate1e_protected_angular_dynamics" if angular_dynamics
-            else "v42_gate1d_protected_attention_rotation"
+            f"v42_gate1f_{contact_rotation_mode}"
+            if contact_rotation_mode is not None
+            else ("v42_gate1e_protected_angular_dynamics"
+                  if angular_dynamics
+                  else "v42_gate1d_protected_attention_rotation")
         ),
         "model_contract_version": (
-            "gate1e_v1" if angular_dynamics else "gate1d_v1"
+            f"gate1f_{contact_rotation_mode}_v1"
+            if contact_rotation_mode is not None
+            else ("gate1e_v1" if angular_dynamics else "gate1d_v1")
         ),
         "seed": seed, "device": device, "epochs": epochs,
         "draws_per_epoch": draws_per_epoch, "lr": lr,
@@ -425,9 +613,16 @@ def train_v42_gate1d(
         "dino_mode": "zero",
         "rotation_parameterization": "axis_angle_exp_map_identity_H1",
         "rotation_output": (
-            "integrated angular-velocity dynamics" if angular_dynamics
-            else "independent absolute rotation per frame"
+            ("contact-gated absolute residual rotation"
+             if contact_rotation_mode == "absolute"
+             else "contact-impulse damped angular integration"
+             if contact_rotation_mode == "impulse"
+             else "integrated angular-velocity dynamics"
+             if angular_dynamics
+             else "independent absolute rotation per frame")
         ),
+        "contact_rotation_mode": contact_rotation_mode,
+        "angular_damping": angular_damping,
         "rotation_attention_inputs": [
             "detached_physical_point_features",
             "normalized_reference_position",
@@ -435,22 +630,55 @@ def train_v42_gate1d(
             "finite_difference_velocity_step",
         ],
         "stage_metadata_is_model_input": False,
+        "contact_gate_inputs": [
+            "detached_physical_point_features",
+            "normalized_reference_position",
+            "ballistic_floor_gap",
+            "finite_difference_velocity_step",
+        ] if contact_rotation_mode is not None else [],
         "loss_weights": {
             "full_trajectory_chordal": 1.0,
             "key_horizon_chordal": 0.25,
             "event_emphasized_chordal": 0.50,
             "rigid_fit": 0.25,
-            "angular_velocity": 0.50 if angular_dynamics else 0.0,
-            "angular_acceleration": 0.25 if angular_dynamics else 0.0,
+            "angular_velocity": (
+                0.50 if angular_dynamics
+                or contact_rotation_mode == "impulse" else 0.0
+            ),
+            "angular_acceleration": (
+                0.25 if angular_dynamics
+                or contact_rotation_mode == "impulse" else 0.0
+            ),
+            "contact_bce": 0.25 if contact_rotation_mode is not None else 0.0,
+            "contact_point": 0.10 if contact_rotation_mode is not None else 0.0,
         },
         "selection": {
             "minimum_epoch": min_eligible_epoch,
+            "gate1f_active_rotation_threshold_rad": (
+                ACTIVE_ROTATION_RAD
+                if contact_rotation_mode is not None else None
+            ),
+            "gate1f_inactive_rotation_threshold_rad": (
+                INACTIVE_ROTATION_RAD
+                if contact_rotation_mode is not None else None
+            ),
+            "gate1f_active_checkpoint_metric": (
+                "UID/stratum-pooled rigid active-frame geodesic"
+                if contact_rotation_mode is not None else None
+            ),
             "overall_postcontact_identity_improvement": "at least 1%",
             "each_stratum_postcontact": "no regression",
             "each_stratum_h59_relative_to_identity": "at most 1.10",
             "required_strata": [
-                "rigid/panel_Z", "rigid/panel_V", "soft_body/panel_Z",
+                "rigid/panel_Z", "rigid/panel_V",
+                *([] if contact_rotation_mode is not None
+                  else ["soft_body/panel_Z"]),
             ],
+            "soft_body_role": (
+                "reported safety diagnostic"
+                if contact_rotation_mode is not None
+                else "required identity-screen stratum"
+            ),
             "test_used": False,
         },
     }
@@ -482,18 +710,36 @@ def train_v42_gate1d(
             train = run_rotation_epoch(
                 model, train_loader, torch.device(device), optimizer,
                 accumulation, max_batches,
-                angular_dynamics,
+                angular_dynamics, contact_rotation_mode,
             )
             validation = run_rotation_epoch(
                 model, validation_loader, torch.device(device), None,
                 accumulation, max_batches,
-                angular_dynamics,
+                angular_dynamics, contact_rotation_mode,
             )
-            selection = validation["rotation_objective"]
+            if contact_rotation_mode is not None:
+                rigid_activity = [
+                    validation["activity"][group]
+                    for group in ("rigid/panel_Z", "rigid/panel_V")
+                    if group in validation["activity"]
+                ]
+                active_count = sum(
+                    item["active_count"] for item in rigid_activity
+                )
+                selection = sum(
+                    item["active_model_rad"] * item["active_count"]
+                    for item in rigid_activity
+                ) / max(active_count, 1)
+            else:
+                selection = validation["rotation_objective"]
             scheduler.step(selection)
             total_improved = selection < best_total
             best_total = min(best_total, selection)
-            screen_passed, screen = identity_screen(validation)
+            screen_passed, screen = (
+                gate1f_screen(validation)
+                if contact_rotation_mode is not None
+                else identity_screen(validation)
+            )
             eligible = screen_passed and epoch >= min_eligible_epoch
             eligible_improved = eligible and selection < best_eligible
             if eligible_improved:
@@ -548,11 +794,20 @@ def train_v42_gate1d(
     write_gate1_validation_baselines(
         model, validation_loader, torch.device(device), baseline_path,
     )
-    _, reported_screen = identity_screen(report_state["validation"])
+    _, reported_screen = (
+        gate1f_screen(report_state["validation"])
+        if contact_rotation_mode is not None
+        else identity_screen(report_state["validation"])
+    )
     completion = {
         "status": "complete",
         "last_epoch": epoch,
-        "identity_checkpoint_screen_passed": screen_passed,
+        "identity_checkpoint_screen_passed": (
+            screen_passed if contact_rotation_mode is None else None
+        ),
+        "gate1f_checkpoint_screen_passed": (
+            screen_passed if contact_rotation_mode is not None else None
+        ),
         "best_total_selection": best_total,
         "best_eligible_selection": (
             best_eligible if screen_passed else None

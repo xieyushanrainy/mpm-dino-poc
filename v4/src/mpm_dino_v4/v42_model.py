@@ -23,6 +23,8 @@ class V42TrajectoryOutput:
     rotation: Tensor
     angular_velocity: Tensor | None
     angular_velocity_change: Tensor | None
+    contact_probability: Tensor | None
+    contact_point: Tensor | None
     canonical_displacement: Tensor
     canonical_shape: Tensor
     position: Tensor
@@ -42,6 +44,7 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         dropout=0.1, frames=59, local_trunk_alpha=0.0,
         gradient_checkpointing=True, rotation_parameterization="6d",
         rotation_attention=False, rotation_dynamics=False,
+        contact_rotation_mode=None, angular_damping=0.95,
     ):
         if local_mode not in {"zero", "geometry", "real_dino"}:
             raise ValueError(local_mode)
@@ -57,6 +60,21 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         self.rotation_parameterization = rotation_parameterization
         self.rotation_attention_enabled = bool(rotation_attention)
         self.rotation_dynamics_enabled = bool(rotation_dynamics)
+        if contact_rotation_mode not in {None, "absolute", "impulse"}:
+            raise ValueError(contact_rotation_mode)
+        self.contact_rotation_mode = contact_rotation_mode
+        self.angular_damping = float(angular_damping)
+        if not 0 <= self.angular_damping <= 1:
+            raise ValueError("angular_damping must lie in [0, 1]")
+        if contact_rotation_mode is not None and (
+            rotation_parameterization != "axis_angle"
+            or not self.rotation_attention_enabled
+            or self.rotation_dynamics_enabled
+        ):
+            raise ValueError(
+                "contact rotation requires axis-angle attention without "
+                "legacy rotation_dynamics"
+            )
         if self.rotation_dynamics_enabled and (
             rotation_parameterization != "axis_angle"
             or not self.rotation_attention_enabled
@@ -86,6 +104,13 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
                 nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, hidden_dim),
                 nn.SiLU(), nn.Linear(hidden_dim, hidden_dim),
             )
+            if self.contact_rotation_mode is not None:
+                self.rotation_contact_head = nn.Sequential(
+                    nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, 1),
+                )
+                self.rotation_contact_score = nn.Sequential(
+                    nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, 1),
+                )
         # Geometry-only and visual conditions are architecture-identical.
         # Geometry-only supplies zero DINO while retaining the real validity
         # mask; real/point-shuffled comparisons differ only in input tensors.
@@ -108,6 +133,11 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
                 ))
         else:
             nn.init.zeros_(self.rotation_head[-1].bias)
+        if self.contact_rotation_mode is not None:
+            nn.init.zeros_(self.rotation_contact_head[-1].weight)
+            nn.init.constant_(self.rotation_contact_head[-1].bias, -4.0)
+            nn.init.zeros_(self.rotation_contact_score[-1].weight)
+            nn.init.zeros_(self.rotation_contact_score[-1].bias)
         nn.init.zeros_(self.canonical_head[-1].weight)
         nn.init.zeros_(self.canonical_head[-1].bias)
 
@@ -151,6 +181,8 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         com_correction[:, 0] = 0
         com = ballistic_com + com_correction
         rotation_features = pooled
+        contact_probability = None
+        contact_point = None
         if self.rotation_attention_enabled:
             batch, frames, points, hidden = physical_hidden.shape
             velocity = (
@@ -186,10 +218,65 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
             rotation_features = (
                 query[:, 0] + self.rotation_adapter(attended[:, 0])
             ).reshape(batch, frames, hidden)
+            if self.contact_rotation_mode is not None:
+                contact_probability = torch.sigmoid(
+                    self.rotation_contact_head(rotation_features).squeeze(-1)
+                )
+                point_scores = self.rotation_contact_score(
+                    point_features
+                ).squeeze(-1).masked_fill(
+                    ~input_mask[:, None], -torch.inf
+                )
+                point_weights = torch.softmax(point_scores, dim=2)
+                contact_point = torch.einsum(
+                    "btn,bni->bti", point_weights, reference_shape
+                )
         rotation_representation = self.rotation_head(rotation_features)
         angular_velocity = None
         angular_velocity_change = None
-        if self.rotation_dynamics_enabled:
+        if self.contact_rotation_mode == "absolute":
+            rotation_representation = rotation_representation.clone()
+            rotation_representation[:, 0] = 0
+            contact_probability = contact_probability.clone()
+            contact_probability[:, 0] = 0
+            # A differentiable "contact has happened" state keeps the
+            # absolute residual enabled after a brief predicted onset.
+            contact_state = 1 - torch.cumprod(
+                1 - contact_probability.clamp(max=1 - 1e-6), dim=1
+            )
+            contact_state = contact_state.clone()
+            contact_state[:, 0] = 0
+            rotation = rotation_vector_to_matrix(
+                rotation_representation * contact_state[..., None]
+            )
+        elif self.contact_rotation_mode == "impulse":
+            rotation_representation = rotation_representation.clone()
+            rotation_representation[:, 0] = 0
+            contact_probability = contact_probability.clone()
+            contact_probability[:, 0] = 0
+            angular_velocity_change = (
+                rotation_representation * contact_probability[..., None]
+            )
+            velocity = torch.zeros_like(rotation_representation[:, 0])
+            accumulated = torch.eye(
+                3, device=rotation_representation.device,
+                dtype=rotation_representation.dtype,
+            ).expand(rotation_representation.shape[0], 3, 3)
+            velocities, rotations = [], []
+            for frame in range(self.frames):
+                if frame:
+                    velocity = (
+                        self.angular_damping * velocity
+                        + angular_velocity_change[:, frame]
+                    )
+                    accumulated = accumulated @ rotation_vector_to_matrix(
+                        velocity * inputs["dt"][:, None]
+                    )
+                velocities.append(velocity)
+                rotations.append(accumulated)
+            angular_velocity = torch.stack(velocities, dim=1)
+            rotation = torch.stack(rotations, dim=1)
+        elif self.rotation_dynamics_enabled:
             rotation_representation = rotation_representation.clone()
             rotation_representation[:, 0] = 0
             angular_velocity_change = rotation_representation
@@ -250,6 +337,8 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
             rotation_representation=rotation_representation,
             rotation=rotation, angular_velocity=angular_velocity,
             angular_velocity_change=angular_velocity_change,
+            contact_probability=contact_probability,
+            contact_point=contact_point,
             canonical_displacement=displacement,
             canonical_shape=canonical_shape, position=position,
             physical_hidden=physical_hidden, local_hidden=local_hidden,
