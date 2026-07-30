@@ -195,7 +195,7 @@ PYTHONPATH=v2/src:v3/src:v4/src python -u v42/run_gate1f.py \
   --patience 20 \
   --plateau-patience 5 \
   --min-eligible-epoch 60 \
-  --gate1b-root v42/run/gate1b_seed42_456 \
+  --gate1b-root v42/runs/gate1b_seed42_456 \
   --runs v42/runs/gate1f_seed42_456
 ```
 

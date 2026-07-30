@@ -17,6 +17,10 @@ def main(args):
     manifest = json.loads(Path(args.manifest).read_text())
     root = Path(args.runs)
     root.mkdir(parents=True, exist_ok=True)
+    # JSON persists tuple-valued argparse defaults as lists. Normalize the
+    # current arguments before comparison so an identical resumed command does
+    # not falsely appear to have changed.
+    normalized_arguments = json.loads(json.dumps(vars(args)))
     provenance = {
         "experiment": "v42_gate1f_contact_rotation_matrix",
         "started_unix": time.time(),
@@ -30,7 +34,7 @@ def main(args):
             if torch.cuda.is_available() else None
         ),
         "manifest_content_sha256": manifest["manifest_content_sha256"],
-        "arguments": vars(args),
+        "arguments": normalized_arguments,
     }
     matrix = root / "MATRIX_CONFIG.json"
     if matrix.exists():
@@ -74,7 +78,7 @@ if __name__ == "__main__":
         "--manifest", default="v41/manifests/v41_uid_splits.json",
     )
     parser.add_argument(
-        "--gate1b-root", default="v42/run/gate1b_seed42_456",
+        "--gate1b-root", default="v42/runs/gate1b_seed42_456",
     )
     parser.add_argument("--runs", default="v42/runs/gate1f_seed42_456")
     parser.add_argument(
