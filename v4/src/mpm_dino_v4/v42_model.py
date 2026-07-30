@@ -39,6 +39,7 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         self, local_mode="geometry", hidden_dim=128, blocks=4, heads=4,
         dropout=0.1, frames=59, local_trunk_alpha=0.0,
         gradient_checkpointing=True, rotation_parameterization="6d",
+        rotation_attention=False,
     ):
         if local_mode not in {"zero", "geometry", "real_dino"}:
             raise ValueError(local_mode)
@@ -52,6 +53,7 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         if rotation_parameterization not in {"6d", "axis_angle"}:
             raise ValueError(rotation_parameterization)
         self.rotation_parameterization = rotation_parameterization
+        self.rotation_attention_enabled = bool(rotation_attention)
         self.v42_com_head = nn.Sequential(
             nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, hidden_dim),
             nn.SiLU(), nn.Linear(hidden_dim, 3),
@@ -62,6 +64,18 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
                 hidden_dim, 6 if rotation_parameterization == "6d" else 3
             ),
         )
+        if self.rotation_attention_enabled:
+            self.rotation_contact_projection = nn.Sequential(
+                nn.Linear(7, hidden_dim), nn.SiLU(),
+                nn.Linear(hidden_dim, hidden_dim),
+            )
+            self.rotation_attention = nn.MultiheadAttention(
+                hidden_dim, heads, dropout=dropout, batch_first=True,
+            )
+            self.rotation_adapter = nn.Sequential(
+                nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, hidden_dim),
+                nn.SiLU(), nn.Linear(hidden_dim, hidden_dim),
+            )
         # Geometry-only and visual conditions are architecture-identical.
         # Geometry-only supplies zero DINO while retaining the real validity
         # mask; real/point-shuffled comparisons differ only in input tensors.
@@ -126,7 +140,43 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         com_correction = com_correction.clone()
         com_correction[:, 0] = 0
         com = ballistic_com + com_correction
-        rotation_representation = self.rotation_head(pooled)
+        rotation_features = pooled
+        if self.rotation_attention_enabled:
+            batch, frames, points, hidden = physical_hidden.shape
+            velocity = (
+                (inputs["x1"] - inputs["x0"])
+                / inputs["dt"][:, None, None].clamp_min(1e-8)
+            )
+            velocity_step = (
+                velocity * inputs["dt"][:, None, None]
+                / radius[:, None, None]
+            )
+            normalized_reference = reference_shape / radius[:, None, None]
+            floor_gap = (
+                legacy.ballistic[..., 2]
+                - inputs["floor_z"][:, None, None]
+            ) / radius[:, None, None]
+            descriptor = torch.cat((
+                normalized_reference[:, None].expand(-1, frames, -1, -1),
+                floor_gap[..., None],
+                velocity_step[:, None].expand(-1, frames, -1, -1),
+            ), dim=-1)
+            contact = self.rotation_contact_projection(descriptor)
+            point_features = physical_hidden.detach() + contact
+            query = pooled.detach().reshape(batch * frames, 1, hidden)
+            attended, _ = self.rotation_attention(
+                query,
+                point_features.reshape(batch * frames, points, hidden),
+                point_features.reshape(batch * frames, points, hidden),
+                key_padding_mask=(
+                    ~input_mask[:, None].expand(-1, frames, -1)
+                ).reshape(batch * frames, points),
+                need_weights=False,
+            )
+            rotation_features = (
+                query[:, 0] + self.rotation_adapter(attended[:, 0])
+            ).reshape(batch, frames, hidden)
+        rotation_representation = self.rotation_head(rotation_features)
         if self.rotation_parameterization == "axis_angle":
             rotation_representation = rotation_representation.clone()
             rotation_representation[:, 0] = 0

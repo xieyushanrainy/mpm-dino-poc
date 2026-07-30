@@ -97,3 +97,29 @@ PYTHONPATH=v2/src:v3/src:v4/src python -u v42/run_gate1c.py \
 ```
 
 This command runs Gate 1C only. It does not start Gate 2.
+
+Gate 1C showed that joint COM/rotation optimization destabilizes rotation.
+Gate 1D is therefore a protected attention-based rotation screen. It starts
+from each seed's Gate-1B `best.pt`, freezes the physical trunk and COM head in
+evaluation mode, and trains only a geometry/contact attention adapter plus an
+axis-angle rotation head. Before training, every validation COM output must be
+bit-identical to the source Gate-1B model.
+
+```bash
+PYTHONPATH=v2/src:v3/src:v4/src python -u v42/run_gate1d.py \
+  --device cuda \
+  --seeds 42 456 \
+  --epochs 120 \
+  --draws 40 \
+  --patience 20 \
+  --plateau-patience 5 \
+  --min-eligible-epoch 60 \
+  --gate1b-root v42/runs/gate1b_seed42_456 \
+  --runs v42/runs/gate1d_seed42_456
+```
+
+An eligible checkpoint must improve identity by at least 1% overall across
+H8/H16/H30/H40/H59, must not regress in rigid-Z, rigid-V or soft-Z separately,
+and must keep each stratum's H59 error within 1.10 times identity. Eligibility
+does not begin before epoch 60. If no epoch passes, the run retains only
+`best_total.pt` for diagnosis. Gate 1D does not launch Gate 2.

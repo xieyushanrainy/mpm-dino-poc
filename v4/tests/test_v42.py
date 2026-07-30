@@ -16,6 +16,9 @@ from mpm_dino_v4.v42_stages import (
     ImpactStage, derive_impact_stages, lowest_active_mean_gap,
 )
 from mpm_dino_v4.v42_train import gate1_parameters
+from mpm_dino_v4.v42_gate1d_train import (
+    identity_screen, rotation_parameters,
+)
 from mpm_dino_v4.v42_rotation_audit import (
     constant_angular_rotation, geodesic_error, proper_kabsch,
     rotation_from_vector,
@@ -158,6 +161,44 @@ def test_gate1c_axis_angle_head_has_exact_identity_h1():
     assert torch.equal(
         output.rotation[:, 0], torch.eye(3).reshape(1, 3, 3),
     )
+
+
+def test_gate1d_attention_rotation_is_protected_from_physical_trunk():
+    sample = inputs(frames=5)
+    model = V42RotationAwareSurrogate(
+        hidden_dim=32, blocks=1, heads=4, dropout=0, frames=5,
+        gradient_checkpointing=False, rotation_parameterization="axis_angle",
+        rotation_attention=True,
+    )
+    output = model(**sample)
+    model.zero_grad(set_to_none=True)
+    output.rotation[:, 1:].square().sum().backward()
+    assert any(
+        parameter.grad is not None
+        for parameter in rotation_parameters(model)
+    )
+    assert all(
+        parameter.grad is None
+        for parameter in model.blocks.parameters()
+    )
+
+
+def test_gate1d_identity_screen_requires_every_stratum():
+    strata = {}
+    for group in ("rigid/panel_Z", "rigid/panel_V", "soft_body/panel_Z"):
+        strata[group] = {
+            f"h{horizon}": {
+                "model_rotation_rad": 0.9,
+                "identity_rotation_rad": 1.0,
+                "count": 1,
+            }
+            for horizon in (1, 8, 16, 30, 40, 59)
+        }
+    passed, _ = identity_screen({"strata": strata})
+    assert passed
+    strata["soft_body/panel_Z"]["h30"]["model_rotation_rad"] = 2.0
+    passed, _ = identity_screen({"strata": strata})
+    assert not passed
 
 
 def test_geometry_is_architecture_identical_zero_dino_control():

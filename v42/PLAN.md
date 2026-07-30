@@ -343,6 +343,22 @@ by at least `1%` and H59 error is at most `1.10` times identity. If no epoch
 passes, only `best_total.pt` is retained for diagnosis and Gate 2 remains
 unauthorized.
 
+Gate 1C subsequently showed transient early identity improvements while COM
+was untrained, followed by rotation regression as the shared trunk optimized
+COM. Gate 1D therefore separates the optimization paths. It loads the
+corresponding Gate-1B checkpoint, keeps the physical trunk and COM head frozen
+in evaluation mode, and trains a geometry/contact attention adapter plus an
+axis-angle rotation head. The attention branch reads detached physical point
+features together with normalized reference position, ballistic floor gap and
+finite-difference velocity. DINO is not used.
+
+Gate 1D must verify validation COM bit identity before training and protected
+parameter identity throughout training. Rotation retains uniform, key-horizon
+and detached event-weighted losses. Checkpoint eligibility starts at epoch 60
+and requires at least 1% overall improvement over identity at
+H8/H16/H30/H40/H59, no mean regression in rigid-Z, rigid-V or soft-Z, and an
+H59 error no greater than 1.10 times identity in every stratum.
+
 ### Step 2: local learnability screen
 
 - start from byte-identical physical baselines;
