@@ -213,13 +213,15 @@ def _rotation_activity_metrics(output, batch, targets):
         )
         active = valid & target_magnitude.ge(ACTIVE_ROTATION_RAD)
         inactive = valid & target_magnitude.le(INACTIVE_ROTATION_RAD)
-        item["active_model_sum"] += float(model_error[active].sum().cpu())
+        item["active_model_sum"] += float(
+            model_error[active].sum().detach().cpu()
+        )
         item["active_identity_sum"] += float(
             target_magnitude[active].sum().cpu()
         )
         item["active_count"] += int(active.sum())
         item["inactive_prediction_sum"] += float(
-            prediction_magnitude[inactive].sum().cpu()
+            prediction_magnitude[inactive].sum().detach().cpu()
         )
         item["inactive_count"] += int(inactive.sum())
     return result

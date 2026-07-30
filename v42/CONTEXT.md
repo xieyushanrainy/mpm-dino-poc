@@ -2,10 +2,11 @@
 
 ## Status
 
-V4.2 is a planning-stage continuation of the V4.1 experiments. No V4.2 model,
-training run, split, or promotion rule has yet been approved. This directory
-records the current scientific interpretation and the questions that must be
-resolved before implementation.
+Gate 0 and the Gate-1 rotation investigation are complete. No rotation
+formulation passed its promotion screen. Gate 1E is retained only as a frozen
+operational placeholder for the now-implemented, not-yet-trained Gate-2
+geometry-only canonical-local screen. Gate 2 does not authorize Gate 3 or DINO
+training.
 
 The frozen V4.1 UID split and dataset remain the starting point. V4.2 must not
 silently change the dataset, split, evaluator, or earlier results.
@@ -104,4 +105,3 @@ V4.2 must not claim:
 - `v41/runs/local_shape_phase2_seed42_456/analysis_20260728/RESULTS.md`
 - `v41/dataset/analysis_deformation_signal_20260728/RESULTS.md`
 - `v42/PLAN.md`
-

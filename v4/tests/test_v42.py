@@ -10,7 +10,9 @@ from mpm_dino_v4.v42_geometry import (
     canonical_targets, identity_rotation_6d, rotation_6d_to_matrix,
     rotation_chordal, rotation_matrix_to_vector, rotation_vector_to_matrix,
 )
-from mpm_dino_v4.v42_losses import compute_v42_losses
+from mpm_dino_v4.v42_losses import (
+    compute_v42_local_losses, compute_v42_losses,
+)
 from mpm_dino_v4.v42_model import V42RotationAwareSurrogate
 from mpm_dino_v4.v42_stages import (
     ImpactStage, derive_impact_stages, lowest_active_mean_gap,
@@ -22,6 +24,10 @@ from mpm_dino_v4.v42_gate1d_train import (
 from mpm_dino_v4.v42_rotation_audit import (
     constant_angular_rotation, geodesic_error, proper_kabsch,
     rotation_from_vector,
+)
+from mpm_dino_v4.v42_gate2 import (
+    LOCAL_PREFIXES, gate2_screen, load_gate1e_source, local_parameters,
+    protected_is_identical, protected_snapshot,
 )
 
 
@@ -429,3 +435,121 @@ def test_floor_gap_uses_lowest_four_active_points_not_single_outlier():
         positions, active, torch.tensor([0.0]), tail_points=4,
     )
     assert torch.allclose(gap, torch.tensor([[(-1.0 + 0.3) / 4]]))
+
+
+def test_gate2_strictly_loads_gate1e_and_only_enables_local_parameters(tmp_path):
+    source = V42RotationAwareSurrogate(
+        local_mode="zero", hidden_dim=32, blocks=1, heads=4,
+        dropout=0, frames=59, gradient_checkpointing=False,
+        rotation_parameterization="axis_angle", rotation_attention=True,
+        rotation_dynamics=True,
+    )
+    checkpoint = tmp_path / "best_total.pt"
+    torch.save({
+        "model": source.state_dict(),
+        "epoch": 20,
+        "config": {
+            "experiment": "v42_gate1e_protected_angular_dynamics",
+            "model_contract_version": "gate1e_v1",
+            "hidden_dim": 32, "blocks": 1, "heads": 4, "dropout": 0,
+        },
+    }, checkpoint)
+    model, state = load_gate1e_source(checkpoint, "geometry")
+    assert state["epoch"] == 20
+    enabled = {
+        name for name, parameter in model.named_parameters()
+        if parameter.requires_grad
+    }
+    assert enabled
+    assert all(name.startswith(LOCAL_PREFIXES) for name in enabled)
+
+
+def test_gate2_local_loss_has_no_gradient_into_protected_global_path():
+    sample = inputs(frames=7)
+    model = V42RotationAwareSurrogate(
+        local_mode="geometry", hidden_dim=32, blocks=1, heads=4,
+        dropout=0, frames=7, gradient_checkpointing=False,
+        local_trunk_alpha=0,
+    )
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
+    for parameter in local_parameters(model):
+        parameter.requires_grad_(True)
+    snapshot = protected_snapshot(model)
+    output = model(**sample)
+    batch = {
+        **sample, "target": rigid_trajectory(sample["x1"], 7),
+        "target_mask": sample["input_mask"][:, None].expand(-1, 7, -1),
+        "family": ["rigid"],
+    }
+    targets = canonical_targets(
+        batch["x1"], batch["target"], batch["input_mask"],
+        batch["target_mask"],
+    )
+    frame_weights = torch.ones(1, 7, requires_grad=True)
+    losses = compute_v42_local_losses(
+        output, batch, targets=targets,
+        frame_weights=frame_weights.detach(),
+    )
+    losses.total.backward()
+    assert any(parameter.grad is not None for parameter in local_parameters(model))
+    assert all(
+        parameter.grad is None
+        for name, parameter in model.named_parameters()
+        if not name.startswith(LOCAL_PREFIXES)
+    )
+    assert frame_weights.grad is None
+    assert protected_is_identical(model, snapshot)
+
+
+def test_zero_local_baseline_is_exactly_zero_with_gate1e_rotation():
+    sample = inputs(frames=5)
+    model = V42RotationAwareSurrogate(
+        local_mode="zero", hidden_dim=32, blocks=1, heads=4,
+        dropout=0, frames=5, gradient_checkpointing=False,
+        rotation_parameterization="axis_angle", rotation_attention=True,
+        rotation_dynamics=True,
+    ).eval()
+    with torch.no_grad():
+        output = model(**sample)
+    assert torch.equal(
+        output.canonical_displacement,
+        torch.zeros_like(output.canonical_displacement),
+    )
+    reconstructed = output.com[:, :, None] + torch.einsum(
+        "bni,btij->btnj",
+        sample["x1"] - sample["x1"].mean(1, keepdim=True),
+        output.rotation,
+    )
+    assert torch.equal(output.position, reconstructed)
+
+
+def test_gate2_screen_enforces_every_threshold_without_aggregation():
+    base = {}
+    learned = {}
+    for group in ("panel_Z/soft_body", "panel_V/soft_body"):
+        base[group] = {
+            "stage_weighted_canonical_nrmse": 1.0,
+            "stage_weighted_strain_rmse": 1.0,
+            "compression_canonical_nrmse": 1.0,
+            "compression_strain_rmse": 1.0,
+            "peak_deformation_canonical_nrmse": 1.0,
+            "peak_deformation_strain_rmse": 1.0,
+        }
+        learned[group] = {
+            **base[group],
+            "stage_weighted_canonical_nrmse": 0.89,
+            "stage_weighted_strain_rmse": 0.89,
+            "compression_canonical_nrmse": 0.9,
+            "uid_balanced_magnitude_correlation": 0.5,
+            "identifiable_timing_episodes": 1,
+            "median_onset_error_frames": 2,
+            "median_peak_error_frames": 2,
+            "rigid_local_rms_fraction": None,
+        }
+    learned["panel_Z/rigid"] = {
+        "rigid_local_rms_fraction": 0.0009,
+    }
+    assert gate2_screen(learned, base)["passed"]
+    learned["panel_V/soft_body"]["uid_balanced_magnitude_correlation"] = 0.49
+    assert not gate2_screen(learned, base)["passed"]

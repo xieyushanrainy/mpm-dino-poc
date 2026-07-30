@@ -1,20 +1,20 @@
 # V4.2
 
-V4.2 is currently a design proposal for separating COM/rigid motion from local
-deformation, correcting rotation-contaminated supervision, and testing
-stage-aware deformation learning with controlled gradient routing.
+V4.2 separates COM/rigid motion from local deformation, corrects
+rotation-contaminated supervision, and tests stage-aware deformation learning
+with controlled gradient routing. Gate 0 and the Gate-1 rotation experiments
+are complete; Gate 2 is the next protected architecture screen.
 
 Read in this order:
 
 1. [`CONTEXT.md`](CONTEXT.md)
 2. [`PLAN.md`](PLAN.md)
-
-No V4.2 training is authorized or recorded in this directory yet.
+3. [`ROTATION_EXPERIMENT_RESULTS.md`](ROTATION_EXPERIMENT_RESULTS.md)
+4. [`GATE2_HANDOVER_PROMPT.md`](GATE2_HANDOVER_PROMPT.md)
 
 Implementation scaffolding now lives in `v4/src/mpm_dino_v4/v42_*.py`.
 It provides rotation-aware targets, protected global/local gradient routing,
-stage metadata and separated losses. This does not record or authorize a
-training run; experimental gates remain manual.
+stage metadata and separated losses. Experimental gates remain manual.
 
 The learned local conditions are architecture-identical: geometry-only is the
 zero-DINO control using the real validity mask, while real and point-shuffled
@@ -200,3 +200,79 @@ PYTHONPATH=v2/src:v3/src:v4/src python -u v42/run_gate1f.py \
 ```
 
 This runner starts Gate 1F only. It does not start Gate 2.
+
+## Gate 2: protected geometry-only canonical local screen
+
+Gate 2 is now implemented but has not been trained locally. It compares:
+
+1. the frozen zero-local-output baseline from each seed's Gate-1E
+   `best_total.pt`; and
+2. the architecture-matched geometry-only local model, which supplies zero
+   DINO features with the real `dino_valid` mask.
+
+`v42/run_gate2.py` has no real-DINO condition and no Gate-3 dispatch. It
+strictly loads the matching Gate-1E checkpoint, records its SHA-256, freezes
+the physical trunk, COM head, and complete rotation branch, and trains only
+the DINO projection retained for capacity matching, geometry-aware region
+tokens, cross-attention adapter, and canonical displacement head. The local
+branch reads stopped-gradient physical features (`alpha=0`).
+
+The objective is exactly:
+
+```text
+1.00 canonical displacement
++ 0.50 normalized strain
++ 0.25 edge length
++ 0.25 local velocity
++ 0.25 rigid zero-local
+```
+
+Canonical vector loss excludes Kabsch-degenerate frames; invariant losses
+remain. Gate-0 stage labels and weights, and Kabsch targets, are detached
+preprocessing and are never model inputs. World reconstruction and penetration
+are diagnostics only and are not backpropagated.
+
+The historical Gate-1E configs omitted model width, block count, heads, and
+dropout. The Gate-2 loader therefore verifies width and block count directly
+from checkpoint tensors and uses the fixed `gate1e_v1` contract values
+(`heads=4`, `dropout=0.1`). This reconstruction is recorded in every Gate-2
+config; the loader never substitutes another checkpoint.
+
+From a csh/tcsh lab-server shell, run:
+
+```csh
+mkdir -p v42/runs/gate2_seed42_456
+setenv PYTHONPATH "v2/src:v3/src:v4/src"
+nohup .venv-v41/bin/python -u v42/run_gate2.py \
+  --device cuda \
+  --seeds 42 456 \
+  --epochs 120 \
+  --draws 40 \
+  --patience 20 \
+  --plateau-patience 5 \
+  --gate1e-root v42/runs/gate1e_seed42_456 \
+  --runs v42/runs/gate2_seed42_456 \
+  >& v42/runs/gate2_seed42_456/console.log &
+echo $! > v42/runs/gate2_seed42_456/launcher.pid
+```
+
+If the reviewed checkpoints are instead downloaded under `v42/run`, pass
+`--gate1e-root v42/run/gate1e_seed42_456` explicitly. Do not rename or copy a
+different checkpoint into that location.
+
+Every seed writes a frozen zero-local validation report, a geometry-only
+validation report, checkpoint/source hashes, and bit-identity checks. Panel Z
+and Panel V and rigid/soft strata remain separate. The two-seed decision must
+apply the full frozen screen: at least 10% stage-weighted canonical-NRMSE and
+strain improvement, compression/peak improvement in both seeds, UID-balanced
+magnitude correlation at least 0.5, identifiable onset/peak median errors no
+greater than two frames, rigid local RMS below 0.1% radius, and exact frozen
+COM/rotation identity.
+
+Timing is diagnostic and uses a predeclared fixed rule: an event is
+identifiable when Gate 0 finds contact and target peak canonical RMS exceeds
+`1e-4` of reference radius; onset is the first post-contact frame at 20% of
+the target peak, and peak is the first maximum. No test data set this rule.
+
+This command starts Gate 2 only. It cannot launch Gate 3 and cannot train a
+real-DINO condition.

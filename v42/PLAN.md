@@ -414,7 +414,15 @@ only after the screening criteria are satisfied.
 
 ## Current recommendation
 
-Do not implement the sampler first. Resolve rotation and target decomposition,
-then perform the training/validation stage audit. After those definitions are
-fixed, implement the smallest local-learnability screen with a protected COM
-baseline and explicit gradient routing.
+The rotation investigation is closed by
+[`ROTATION_EXPERIMENT_RESULTS.md`](ROTATION_EXPERIMENT_RESULTS.md). Gate 2 uses
+Gate 1E only as the least damaging frozen operational placeholder; it is not a
+promoted rotation solution.
+
+The protected Gate-2 implementation is `v42/run_gate2.py` and
+`v4/src/mpm_dino_v4/v42_gate2.py`. It implements Step 2's zero-local versus
+geometry-only comparison with `alpha=0`, detached Kabsch/stage preprocessing,
+the approved local objective, separate Panel Z/V and rigid/soft reporting,
+source-checkpoint hashes, and COM/rotation bit-identity checks. No local
+training was run during implementation. Gate 3 remains unauthorized until the
+two-seed Gate-2 validation screen is reviewed.

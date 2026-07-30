@@ -57,6 +57,16 @@ class V42GlobalLosses:
     rigid_fit: Tensor
 
 
+@dataclass
+class V42LocalLosses:
+    total: Tensor
+    canonical: Tensor
+    strain: Tensor
+    edge_length: Tensor
+    local_velocity: Tensor
+    rigid_zero: Tensor
+
+
 def compute_v42_global_losses(
     output: V42TrajectoryOutput,
     batch: dict,
@@ -161,6 +171,36 @@ def compute_v42_losses(
         output, batch, targets=targets,
         rotation_frame_weights=rotation_frame_weights, beta=beta,
     )
+    local_losses = compute_v42_local_losses(
+        output, batch, targets=targets, frame_weights=frame_weights, beta=beta,
+    )
+    return V42Losses(
+        global_losses.total + local_losses.total,
+        global_losses.total, local_losses.total,
+        global_losses.com_position, global_losses.com_velocity,
+        global_losses.com_acceleration, global_losses.com_key,
+        global_losses.rotation, global_losses.rotation_key,
+        global_losses.rotation_event, global_losses.rigid_fit,
+        local_losses.canonical, local_losses.strain,
+        local_losses.edge_length, local_losses.local_velocity,
+        local_losses.rigid_zero,
+    )
+
+
+def compute_v42_local_losses(
+    output: V42TrajectoryOutput,
+    batch: dict,
+    targets: CanonicalTargets | None = None,
+    frame_weights: Tensor | None = None,
+    beta: float = 0.01,
+) -> V42LocalLosses:
+    """Approved canonical-local objective, with no world/global loss path."""
+    mask = batch["target_mask"]
+    if targets is None:
+        targets = canonical_targets(
+            batch["x1"], batch["target"], batch["input_mask"], mask
+        )
+    radius = targets.radius
     rigid_objects = torch.tensor(
         [family == "rigid" for family in batch["family"]],
         device=output.com.device, dtype=torch.bool,
@@ -217,18 +257,10 @@ def compute_v42_losses(
         output.canonical_displacement / radius[:, None, None, None],
         rigid_mask, frame_weights, beta,
     )
-    global_total = global_losses.total
     local_total = (
         canonical + 0.50 * strain + 0.25 * edge_length
         + 0.25 * local_velocity + 0.25 * rigid_zero
     )
-    return V42Losses(
-        global_total + local_total, global_total, local_total,
-        global_losses.com_position, global_losses.com_velocity,
-        global_losses.com_acceleration, global_losses.com_key,
-        global_losses.rotation, global_losses.rotation_key,
-        global_losses.rotation_event,
-        global_losses.rigid_fit,
-        canonical, strain, edge_length,
-        local_velocity, rigid_zero,
+    return V42LocalLosses(
+        local_total, canonical, strain, edge_length, local_velocity, rigid_zero,
     )
