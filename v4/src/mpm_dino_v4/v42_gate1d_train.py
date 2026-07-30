@@ -7,13 +7,16 @@ from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
+from torch.nn import functional as F
 
 from .v41_data import MODEL_INPUT_KEYS, UIDBalancedSampler, V41TrajectoryDataset
 from .v41_train import (
     atomic_torch_save, move, restore_rng_state, rng_state, seed_all,
     state_sha256,
 )
-from .v42_geometry import canonical_targets, rotation_geodesic
+from .v42_geometry import (
+    canonical_targets, rotation_geodesic, rotation_matrix_to_vector,
+)
 from .v42_losses import compute_v42_global_losses
 from .v42_model import V42RotationAwareSurrogate
 from .v42_stages import derive_impact_stages
@@ -177,9 +180,63 @@ def _finalize_metrics(metrics):
     return result
 
 
+def angular_dynamics_losses(output, batch, targets, frame_weights):
+    if output.angular_velocity is None:
+        zero = output.rotation.new_zeros(())
+        return zero, zero
+    identity = torch.eye(
+        3, device=output.rotation.device, dtype=output.rotation.dtype,
+    ).expand(output.rotation.shape[0], 1, 3, 3)
+    previous = torch.cat((identity, targets.rotation[:, :-1]), dim=1)
+    relative = previous.transpose(-1, -2) @ targets.rotation
+    target_velocity = rotation_matrix_to_vector(relative) / (
+        batch["dt"][:, None, None].clamp_min(1e-8)
+    )
+    valid = targets.valid_rotation.clone()
+    valid[:, 1:] = valid[:, 1:] & targets.valid_rotation[:, :-1]
+    valid[:, 0] = False
+    family_weight = torch.tensor(
+        [1.0 if family == "rigid" else 0.25 for family in batch["family"]],
+        device=output.rotation.device, dtype=output.rotation.dtype,
+    )[:, None]
+    weight = (
+        valid.to(output.rotation.dtype) * frame_weights * family_weight
+    )
+    velocity_error = (
+        output.angular_velocity - target_velocity
+    ) * batch["dt"][:, None, None]
+    velocity_raw = F.smooth_l1_loss(
+        velocity_error, torch.zeros_like(velocity_error),
+        reduction="none", beta=0.01,
+    ).mean(-1)
+    velocity_loss = (
+        velocity_raw * weight
+    ).sum() / weight.sum().clamp_min(1)
+    acceleration_valid = valid[:, 1:] & valid[:, :-1]
+    acceleration_weight = (
+        frame_weights[:, 1:] * family_weight
+        * acceleration_valid.to(output.rotation.dtype)
+    )
+    predicted_change = (
+        output.angular_velocity[:, 1:]
+        - output.angular_velocity[:, :-1]
+    ) * batch["dt"][:, None, None]
+    target_change = (
+        target_velocity[:, 1:] - target_velocity[:, :-1]
+    ) * batch["dt"][:, None, None]
+    acceleration_raw = F.smooth_l1_loss(
+        predicted_change - target_change,
+        torch.zeros_like(predicted_change), reduction="none", beta=0.01,
+    ).mean(-1)
+    acceleration_loss = (
+        acceleration_raw * acceleration_weight
+    ).sum() / acceleration_weight.sum().clamp_min(1)
+    return velocity_loss, acceleration_loss
+
+
 def run_rotation_epoch(
     model, loader, device, optimizer=None, accumulation=4,
-    max_batches=None,
+    max_batches=None, angular_dynamics=False,
 ):
     training = optimizer is not None
     set_rotation_training_mode(model, training)
@@ -206,10 +263,15 @@ def run_rotation_epoch(
             losses = compute_v42_global_losses(
                 output, batch, targets, stages.weights[:, 1:].detach(),
             )
+            velocity_loss, acceleration_loss = angular_dynamics_losses(
+                output, batch, targets, stages.weights[:, 1:].detach(),
+            )
             objective = (
                 losses.rotation + 0.25 * losses.rotation_key
                 + 0.50 * losses.rotation_event
                 + 0.25 * losses.rigid_fit
+                + (0.50 * velocity_loss + 0.25 * acceleration_loss
+                   if angular_dynamics else 0)
             )
             if training:
                 (objective / accumulation).backward()
@@ -223,6 +285,8 @@ def run_rotation_epoch(
                 "rotation_key": losses.rotation_key,
                 "rotation_event": losses.rotation_event,
                 "rigid_fit": losses.rigid_fit,
+                "angular_velocity": velocity_loss,
+                "angular_acceleration": acceleration_loss,
             }
             for key, value in values.items():
                 totals[key] = totals.get(key, 0.0) + float(
@@ -291,7 +355,7 @@ def train_v42_gate1d(
     root, manifest, gate1b_checkpoint, output, seed, device="cuda",
     epochs=120, draws_per_epoch=40, lr=2e-4, accumulation=4,
     patience=20, plateau_patience=5, min_eligible_epoch=60,
-    resume=True, max_batches=None,
+    resume=True, max_batches=None, angular_dynamics=False,
 ):
     seed_all(seed)
     output = Path(output)
@@ -321,6 +385,7 @@ def train_v42_gate1d(
         blocks=source_config["blocks"], heads=source_config["heads"],
         dropout=source_config["dropout"], frames=59,
         rotation_parameterization="axis_angle", rotation_attention=True,
+        rotation_dynamics=angular_dynamics,
     ).to(device)
     source_state = load_gate1b_source(model, source_checkpoint)
     protected = protected_snapshot(model)
@@ -335,8 +400,13 @@ def train_v42_gate1d(
         threshold=0.005, threshold_mode="rel", min_lr=1e-6,
     )
     config = {
-        "experiment": "v42_gate1d_protected_attention_rotation",
-        "model_contract_version": "gate1d_v1",
+        "experiment": (
+            "v42_gate1e_protected_angular_dynamics" if angular_dynamics
+            else "v42_gate1d_protected_attention_rotation"
+        ),
+        "model_contract_version": (
+            "gate1e_v1" if angular_dynamics else "gate1d_v1"
+        ),
         "seed": seed, "device": device, "epochs": epochs,
         "draws_per_epoch": draws_per_epoch, "lr": lr,
         "accumulation": accumulation, "patience": patience,
@@ -354,6 +424,10 @@ def train_v42_gate1d(
         "validation_com_bit_identity_checked_episodes": checked_episodes,
         "dino_mode": "zero",
         "rotation_parameterization": "axis_angle_exp_map_identity_H1",
+        "rotation_output": (
+            "integrated angular-velocity dynamics" if angular_dynamics
+            else "independent absolute rotation per frame"
+        ),
         "rotation_attention_inputs": [
             "detached_physical_point_features",
             "normalized_reference_position",
@@ -366,6 +440,8 @@ def train_v42_gate1d(
             "key_horizon_chordal": 0.25,
             "event_emphasized_chordal": 0.50,
             "rigid_fit": 0.25,
+            "angular_velocity": 0.50 if angular_dynamics else 0.0,
+            "angular_acceleration": 0.25 if angular_dynamics else 0.0,
         },
         "selection": {
             "minimum_epoch": min_eligible_epoch,
@@ -406,10 +482,12 @@ def train_v42_gate1d(
             train = run_rotation_epoch(
                 model, train_loader, torch.device(device), optimizer,
                 accumulation, max_batches,
+                angular_dynamics,
             )
             validation = run_rotation_epoch(
                 model, validation_loader, torch.device(device), None,
                 accumulation, max_batches,
+                angular_dynamics,
             )
             selection = validation["rotation_objective"]
             scheduler.step(selection)

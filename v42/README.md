@@ -123,3 +123,33 @@ H8/H16/H30/H40/H59, must not regress in rigid-Z, rigid-V or soft-Z separately,
 and must keep each stratum's H59 error within 1.10 times identity. Eligibility
 does not begin before epoch 60. If no epoch passes, the run retains only
 `best_total.pt` for diagnosis. Gate 1D does not launch Gate 2.
+
+Gate 1D learned some H8-H40 impact rotation but developed severe H59 drift.
+Gate 1E keeps the same protected attention inputs and instead predicts changes
+in angular velocity. These are accumulated into angular velocity and integrated
+through time into the rotation trajectory:
+
+```text
+delta_omega_t = attention(features_t)
+omega_t = omega_(t-1) + delta_omega_t
+R_t = R_(t-1) Exp(dt * omega_t)
+```
+
+H1 remains exact identity. Detached target angular velocity and angular
+acceleration add loss weights `0.50` and `0.25`, respectively. The Gate-1D
+identity screen and COM/trunk protection remain unchanged.
+
+```bash
+PYTHONPATH=v2/src:v3/src:v4/src python -u v42/run_gate1e.py \
+  --device cuda \
+  --seeds 42 456 \
+  --epochs 120 \
+  --draws 40 \
+  --patience 20 \
+  --plateau-patience 5 \
+  --min-eligible-epoch 60 \
+  --gate1b-root v42/runs/gate1b_seed42_456 \
+  --runs v42/runs/gate1e_seed42_456
+```
+
+Gate 1E does not launch Gate 2.

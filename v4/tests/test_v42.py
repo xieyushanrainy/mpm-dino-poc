@@ -8,7 +8,7 @@ import torch
 from mpm_dino_v2.graph import build_mutual_knn_graph
 from mpm_dino_v4.v42_geometry import (
     canonical_targets, identity_rotation_6d, rotation_6d_to_matrix,
-    rotation_chordal, rotation_vector_to_matrix,
+    rotation_chordal, rotation_matrix_to_vector, rotation_vector_to_matrix,
 )
 from mpm_dino_v4.v42_losses import compute_v42_losses
 from mpm_dino_v4.v42_model import V42RotationAwareSurrogate
@@ -86,6 +86,12 @@ def test_axis_angle_exponential_is_proper_and_differentiable():
     matrix.square().sum().backward()
     assert vector.grad is not None
     assert torch.isfinite(vector.grad).all()
+
+
+def test_axis_angle_log_exp_round_trip():
+    vector = torch.tensor([[0.1, -0.2, 0.3], [-0.05, 0.02, 0.01]])
+    recovered = rotation_matrix_to_vector(rotation_vector_to_matrix(vector))
+    assert torch.allclose(recovered, vector, atol=1e-6)
 
 
 def test_constant_angular_baseline_extrapolates_observed_rotation():
@@ -180,6 +186,33 @@ def test_gate1d_attention_rotation_is_protected_from_physical_trunk():
     assert all(
         parameter.grad is None
         for parameter in model.blocks.parameters()
+    )
+
+
+def test_gate1e_integrates_angular_velocity_and_anchors_h1():
+    sample = inputs(frames=5)
+    model = V42RotationAwareSurrogate(
+        hidden_dim=32, blocks=1, heads=4, dropout=0, frames=5,
+        gradient_checkpointing=False, rotation_parameterization="axis_angle",
+        rotation_attention=True, rotation_dynamics=True,
+    )
+    with torch.no_grad():
+        model.rotation_head[-1].bias.copy_(torch.tensor([0.0, 0.0, 0.1]))
+    output = model(**sample)
+    assert output.angular_velocity is not None
+    assert output.angular_velocity_change is not None
+    assert torch.equal(
+        output.rotation[:, 0], torch.eye(3).reshape(1, 3, 3),
+    )
+    assert torch.equal(
+        output.angular_velocity[:, 0], torch.zeros(1, 3),
+    )
+    assert torch.allclose(
+        output.angular_velocity[:, 2] - output.angular_velocity[:, 1],
+        torch.tensor([[0.0, 0.0, 0.1]]), atol=1e-6,
+    )
+    assert not torch.equal(
+        output.rotation[:, -1], torch.eye(3).reshape(1, 3, 3),
     )
 
 

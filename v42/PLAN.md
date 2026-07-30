@@ -359,6 +359,15 @@ and requires at least 1% overall improvement over identity at
 H8/H16/H30/H40/H59, no mean regression in rigid-Z, rigid-V or soft-Z, and an
 H59 error no greater than 1.10 times identity in every stratum.
 
+Gate 1D completed both seeds without an eligible checkpoint. It improved some
+rigid H8-H40 rotations but accumulated false late rotation at H59. Gate 1E
+retains the protected Gate-1B trunk and contact-attention adapter but predicts
+angular-velocity changes rather than independent absolute rotations. The
+changes accumulate into angular velocity, which is integrated through time
+using the exponential map. Detached Kabsch targets supply angular-velocity and
+angular-acceleration losses with weights `0.50` and `0.25`. All Gate-1D
+identity-screen and bit-identity requirements remain unchanged.
+
 ### Step 2: local learnability screen
 
 - start from byte-identical physical baselines;

@@ -21,6 +21,8 @@ class V42TrajectoryOutput:
     ballistic_com: Tensor
     rotation_representation: Tensor
     rotation: Tensor
+    angular_velocity: Tensor | None
+    angular_velocity_change: Tensor | None
     canonical_displacement: Tensor
     canonical_shape: Tensor
     position: Tensor
@@ -39,7 +41,7 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         self, local_mode="geometry", hidden_dim=128, blocks=4, heads=4,
         dropout=0.1, frames=59, local_trunk_alpha=0.0,
         gradient_checkpointing=True, rotation_parameterization="6d",
-        rotation_attention=False,
+        rotation_attention=False, rotation_dynamics=False,
     ):
         if local_mode not in {"zero", "geometry", "real_dino"}:
             raise ValueError(local_mode)
@@ -54,6 +56,14 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
             raise ValueError(rotation_parameterization)
         self.rotation_parameterization = rotation_parameterization
         self.rotation_attention_enabled = bool(rotation_attention)
+        self.rotation_dynamics_enabled = bool(rotation_dynamics)
+        if self.rotation_dynamics_enabled and (
+            rotation_parameterization != "axis_angle"
+            or not self.rotation_attention_enabled
+        ):
+            raise ValueError(
+                "rotation dynamics requires axis-angle attention rotation"
+            )
         self.v42_com_head = nn.Sequential(
             nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, hidden_dim),
             nn.SiLU(), nn.Linear(hidden_dim, 3),
@@ -177,7 +187,30 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
                 query[:, 0] + self.rotation_adapter(attended[:, 0])
             ).reshape(batch, frames, hidden)
         rotation_representation = self.rotation_head(rotation_features)
-        if self.rotation_parameterization == "axis_angle":
+        angular_velocity = None
+        angular_velocity_change = None
+        if self.rotation_dynamics_enabled:
+            rotation_representation = rotation_representation.clone()
+            rotation_representation[:, 0] = 0
+            angular_velocity_change = rotation_representation
+            angular_velocity = torch.cumsum(
+                angular_velocity_change, dim=1,
+            )
+            angular_velocity = angular_velocity.clone()
+            angular_velocity[:, 0] = 0
+            step_rotation = rotation_vector_to_matrix(
+                angular_velocity * inputs["dt"][:, None, None]
+            )
+            accumulated = torch.eye(
+                3, device=step_rotation.device, dtype=step_rotation.dtype,
+            ).expand(step_rotation.shape[0], 3, 3)
+            rotations = []
+            for frame in range(self.frames):
+                if frame:
+                    accumulated = accumulated @ step_rotation[:, frame]
+                rotations.append(accumulated)
+            rotation = torch.stack(rotations, dim=1)
+        elif self.rotation_parameterization == "axis_angle":
             rotation_representation = rotation_representation.clone()
             rotation_representation[:, 0] = 0
             rotation = rotation_vector_to_matrix(rotation_representation)
@@ -215,7 +248,8 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         return V42TrajectoryOutput(
             com=com, ballistic_com=ballistic_com,
             rotation_representation=rotation_representation,
-            rotation=rotation,
+            rotation=rotation, angular_velocity=angular_velocity,
+            angular_velocity_change=angular_velocity_change,
             canonical_displacement=displacement,
             canonical_shape=canonical_shape, position=position,
             physical_hidden=physical_hidden, local_hidden=local_hidden,

@@ -50,6 +50,23 @@ def rotation_vector_to_matrix(vector: Tensor) -> Tensor:
     )
 
 
+def rotation_matrix_to_vector(rotation: Tensor) -> Tensor:
+    """SO(3) logarithm for target construction and angular diagnostics."""
+    cosine = (
+        rotation.diagonal(dim1=-2, dim2=-1).sum(-1) - 1
+    ) / 2
+    angle = torch.acos(cosine.clamp(-1 + 1e-7, 1 - 1e-7))
+    vee = torch.stack((
+        rotation[..., 2, 1] - rotation[..., 1, 2],
+        rotation[..., 0, 2] - rotation[..., 2, 0],
+        rotation[..., 1, 0] - rotation[..., 0, 1],
+    ), dim=-1)
+    scale = angle / (2 * torch.sin(angle).clamp_min(1e-7))
+    vector = vee * scale[..., None]
+    small = angle < 1e-3
+    return torch.where(small[..., None], 0.5 * vee, vector)
+
+
 def rotation_geodesic(predicted: Tensor, target: Tensor) -> Tensor:
     relative = predicted.transpose(-1, -2) @ target
     cosine = ((relative.diagonal(dim1=-2, dim2=-1).sum(-1) - 1) / 2)
