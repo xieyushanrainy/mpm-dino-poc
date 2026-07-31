@@ -31,6 +31,25 @@ STAGE_RAW_WEIGHTS = {
 }
 
 
+def total_mass_stage_weights(labels: Tensor) -> Tensor:
+    """Give each present stage total mass proportional to its importance.
+
+    Within one episode, every frame in stage ``s`` receives ``alpha_s / n_s``
+    before the complete trajectory is normalized to mean one. Unlike the
+    historical per-frame weighting, a long stage cannot dominate merely by
+    containing more saved frames.
+    """
+    if labels.ndim != 2:
+        raise ValueError("stage labels must have shape [batch, frames]")
+    weights = torch.zeros_like(labels, dtype=torch.float32)
+    for stage, importance in STAGE_RAW_WEIGHTS.items():
+        selected = labels.eq(int(stage))
+        counts = selected.sum(1, keepdim=True)
+        per_frame = float(importance) / counts.clamp_min(1).to(weights.dtype)
+        weights = weights + selected.to(weights.dtype) * per_frame
+    return weights / weights.mean(1, keepdim=True).clamp_min(1e-8)
+
+
 @dataclass
 class StageMetadata:
     labels: Tensor

@@ -15,7 +15,8 @@ from mpm_dino_v4.v42_losses import (
 )
 from mpm_dino_v4.v42_model import V42RotationAwareSurrogate
 from mpm_dino_v4.v42_stages import (
-    ImpactStage, derive_impact_stages, lowest_active_mean_gap,
+    STAGE_RAW_WEIGHTS, ImpactStage, derive_impact_stages,
+    lowest_active_mean_gap, total_mass_stage_weights,
 )
 from mpm_dino_v4.v42_train import gate1_parameters
 from mpm_dino_v4.v42_gate1d_train import (
@@ -424,6 +425,45 @@ def test_stage_metadata_is_not_a_model_input_and_weights_are_bounded():
     assert stages.weights.max() <= 4
     assert stages.contact_onset[0] >= 0
     assert int(ImpactStage.CONTACT_ONSET) in stages.labels
+
+
+def test_total_mass_stage_weights_remove_stage_length_dominance():
+    labels = torch.tensor([[
+        *([int(ImpactStage.FREE_FLIGHT)] * 4),
+        *([int(ImpactStage.CONTACT_ONSET)] * 2),
+        int(ImpactStage.PEAK_DEFORMATION),
+        *([int(ImpactStage.POST_PRIMARY_EVENT)] * 5),
+    ]])
+    weights = total_mass_stage_weights(labels)
+    assert torch.allclose(weights.mean(1), torch.ones(1))
+    totals = {
+        stage: weights[labels == int(stage)].sum()
+        for stage in (
+            ImpactStage.FREE_FLIGHT,
+            ImpactStage.CONTACT_ONSET,
+            ImpactStage.PEAK_DEFORMATION,
+            ImpactStage.POST_PRIMARY_EVENT,
+        )
+    }
+    reference = totals[ImpactStage.FREE_FLIGHT]
+    for stage, total in totals.items():
+        expected = STAGE_RAW_WEIGHTS[stage] / STAGE_RAW_WEIGHTS[
+            ImpactStage.FREE_FLIGHT
+        ]
+        assert torch.allclose(total / reference, torch.tensor(expected))
+    assert torch.allclose(
+        weights[0, 0] / weights[0, -1], torch.tensor(5 / 4),
+    )
+
+
+def test_total_mass_peak_can_exceed_old_per_frame_cap():
+    labels = torch.tensor([[
+        *([int(ImpactStage.POST_PRIMARY_EVENT)] * 58),
+        int(ImpactStage.PEAK_DEFORMATION),
+    ]])
+    weights = total_mass_stage_weights(labels)
+    assert weights[0, -1] > 4
+    assert torch.allclose(weights.mean(), torch.tensor(1.0))
 
 
 def test_floor_gap_uses_lowest_four_active_points_not_single_outlier():

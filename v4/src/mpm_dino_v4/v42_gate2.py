@@ -18,7 +18,10 @@ from .v41_train import (
 from .v42_geometry import canonical_targets
 from .v42_losses import compute_v42_local_losses
 from .v42_model import V42RotationAwareSurrogate
-from .v42_stages import ImpactStage, derive_impact_stages
+from .v42_stages import (
+    STAGE_RAW_WEIGHTS, ImpactStage, derive_impact_stages,
+    total_mass_stage_weights,
+)
 
 
 LOCAL_PREFIXES = (
@@ -144,8 +147,10 @@ def _batch_targets_and_stages(batch):
 
 def run_gate2_epoch(
     model, loader, device, optimizer=None, accumulation=4, max_batches=None,
-    loss_options=None,
+    loss_options=None, stage_weight_mode="per_frame",
 ):
+    if stage_weight_mode not in {"per_frame", "total_mass"}:
+        raise ValueError(f"unknown stage weight mode: {stage_weight_mode}")
     training = optimizer is not None
     set_gate2_mode(model, training)
     parameters = local_parameters(model)
@@ -157,7 +162,11 @@ def run_gate2_epoch(
             batch = move(raw, device)
             targets, stages = _batch_targets_and_stages(batch)
             # Kabsch targets, labels and weights are detached preprocessing.
-            frame_weights = stages.weights[:, 1:].detach()
+            frame_weights = (
+                total_mass_stage_weights(stages.labels[:, 1:])
+                if stage_weight_mode == "total_mass"
+                else stages.weights[:, 1:]
+            ).detach()
             output = model(**{
                 key: batch[key] for key in MODEL_INPUT_KEYS
             })
@@ -503,6 +512,7 @@ def train_v42_gate2(
     epochs=120, draws_per_epoch=40, lr=2e-4, accumulation=4,
     patience=20, plateau_patience=5, resume=True, max_batches=None,
     loss_options=None, experiment_name=None, model_contract_version=None,
+    stage_weight_mode="per_frame",
 ):
     seed_all(seed)
     device = torch.device(device)
@@ -551,6 +561,9 @@ def train_v42_gate2(
     source_path = Path(gate1e_checkpoint)
     loss_options = dict(loss_options or {})
     gate2b = bool(loss_options)
+    gate2c = stage_weight_mode == "total_mass"
+    if stage_weight_mode not in {"per_frame", "total_mass"}:
+        raise ValueError(f"unknown stage weight mode: {stage_weight_mode}")
     if gate2b:
         required = {
             "soft_deformation_amplification_cap",
@@ -564,11 +577,14 @@ def train_v42_gate2(
             )
     config = {
         "experiment": experiment_name or (
-            "v42_gate2b_family_balanced_deformation_scaled"
+            "v42_gate2c_total_mass_stage_balanced" if gate2c
+            else "v42_gate2b_family_balanced_deformation_scaled"
             if gate2b else "v42_gate2_geometry_only_canonical_local"
         ),
         "model_contract_version": model_contract_version or (
-            "gate2b_geometry_only_v1" if gate2b else "gate2_geometry_only_v1"
+            "gate2c_geometry_only_v1" if gate2c
+            else "gate2b_geometry_only_v1" if gate2b
+            else "gate2_geometry_only_v1"
         ),
         "seed": seed, "device": str(device), "epochs": epochs,
         "draws_per_epoch": draws_per_epoch, "lr": lr,
@@ -631,6 +647,21 @@ def train_v42_gate2(
             "sampler": "strict alternating family UID-balanced draws",
             "evaluation_screen": "unchanged_gate2_frozen_screen",
         }
+    if gate2c:
+        config["gate2c_stage_weight_design"] = {
+            "training_mode": "total_mass",
+            "formula": "w_t proportional to alpha_stage / frames_in_stage",
+            "normalization": "per-episode mean frame weight equals one",
+            "stage_importance": {
+                stage.name.lower(): weight
+                for stage, weight in STAGE_RAW_WEIGHTS.items()
+            },
+            "weight_cap": None,
+            "target_frames_only": True,
+            "labels_and_weights_detached": True,
+            "evaluation_screen": "unchanged_gate2_frozen_screen",
+            "parent_loss_contract": "gate2b_balanced_x1",
+        }
     (output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
     best, stale, start_epoch = float("inf"), 0, 1
     last_path = output / "last.pt"
@@ -656,15 +687,18 @@ def train_v42_gate2(
                 model, train_loader, device, optimizer,
                 accumulation, max_batches,
                 loss_options,
+                stage_weight_mode,
             )
             validation = run_gate2_epoch(
                 model, validation_loader, device, None,
                 accumulation, max_batches,
                 loss_options,
+                stage_weight_mode,
             )
             rows = gate2_rows(
                 model, validation_loader, device,
-                "geometry_only_gate2b" if gate2b else "geometry_only",
+                "geometry_only_gate2c" if gate2c
+                else "geometry_only_gate2b" if gate2b else "geometry_only",
             )
             summary = summarize_gate2(rows)
             soft = summary["panel_Z/soft_body"]
@@ -708,7 +742,8 @@ def train_v42_gate2(
     model.load_state_dict(best_state["model"])
     learned_rows = gate2_rows(
         model, validation_loader, device,
-        "geometry_only_gate2b" if gate2b else "geometry_only",
+        "geometry_only_gate2c" if gate2c
+        else "geometry_only_gate2b" if gate2b else "geometry_only",
     )
     learned_summary = summarize_gate2(learned_rows)
     checked_after = verify_global_bit_identity(

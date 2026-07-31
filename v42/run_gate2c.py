@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import platform
+import socket
+import time
+from pathlib import Path
+
+import torch
+
+from mpm_dino_v4.v42_gate2 import file_sha256, train_v42_gate2
+from mpm_dino_v4.v42_stages import STAGE_RAW_WEIGHTS
+
+
+LOSS_CONTRACT = {
+    "soft_deformation_amplification_cap": 1.0,
+    "soft_deformation_quantile": 0.95,
+    "soft_deformation_floor_fraction": 0.005,
+    "family_balanced": True,
+    "rigid_family_weight": 0.25,
+    "rigid_zero_weight": 0.0,
+}
+
+
+def main(args):
+    if args.draws % 2:
+        raise ValueError("Gate-2C requires an even draw count for exact family balance")
+    manifest = json.loads(Path(args.manifest).read_text())
+    root = Path(args.runs)
+    root.mkdir(parents=True, exist_ok=True)
+    sources = {
+        str(seed): {
+            "path": str(Path(args.gate1e_root) / f"seed{seed}" / "best_total.pt")
+        }
+        for seed in args.seeds
+    }
+    for seed, source in sources.items():
+        path = Path(source["path"])
+        if not path.exists():
+            raise FileNotFoundError(
+                f"missing authoritative Gate-1E seed {seed} source: {path}"
+            )
+        source["sha256"] = file_sha256(path)
+    stage_contract = {
+        "mode": "total_mass",
+        "formula": "w_t proportional to alpha_stage / frames_in_stage",
+        "normalization": "per-episode mean frame weight equals one",
+        "weight_cap": None,
+        "target_frames_only": True,
+        "stage_importance": {
+            stage.name.lower(): weight for stage, weight in STAGE_RAW_WEIGHTS.items()
+        },
+    }
+    provenance = {
+        "experiment": "v42_gate2c_total_mass_stage_balanced",
+        "gate": "2C",
+        "parent_condition": "gate2b_balanced_x1",
+        "parent_gate2b_result": "failed_frozen_screen",
+        "gate3_or_dino_training": False,
+        "test_data_used": False,
+        "started_unix": time.time(),
+        "hostname": socket.gethostname(),
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "torch": torch.__version__,
+        "cuda": torch.version.cuda,
+        "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "manifest_content_sha256": manifest["manifest_content_sha256"],
+        "gate1e_sources": sources,
+        "loss_contract": LOSS_CONTRACT,
+        "stage_weight_contract": stage_contract,
+        "arguments": vars(args),
+        "frozen_evaluation_screen": "v42_gate2_gate2_screen",
+    }
+    matrix = root / "MATRIX_CONFIG.json"
+    if matrix.exists():
+        prior = json.loads(matrix.read_text())
+        for key in (
+            "arguments", "manifest_content_sha256", "gate1e_sources",
+            "loss_contract", "stage_weight_contract", "frozen_evaluation_screen",
+        ):
+            if prior[key] != provenance[key]:
+                raise ValueError(f"refusing changed Gate-2C matrix {key}")
+    else:
+        matrix.write_text(json.dumps(provenance, indent=2) + "\n")
+    for seed in args.seeds:
+        output = root / f"seed{seed}"
+        if (output / "RUN_COMPLETE.json").exists():
+            print(f"skip complete: {output}", flush=True)
+            continue
+        train_v42_gate2(
+            args.dataset, manifest, sources[str(seed)]["path"], output, seed,
+            device=args.device, epochs=args.epochs,
+            draws_per_epoch=args.draws, lr=args.lr,
+            accumulation=args.accumulation, patience=args.patience,
+            plateau_patience=args.plateau_patience,
+            max_batches=args.max_batches,
+            loss_options=LOSS_CONTRACT,
+            experiment_name="v42_gate2c_total_mass_stage_balanced",
+            model_contract_version="gate2c_geometry_only_v1",
+            stage_weight_mode="total_mass",
+        )
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description=(
+            "Gate 2C only: Gate-2B balanced_x1 with total-mass stage-balanced "
+            "training weights"
+        )
+    )
+    parser.add_argument("--dataset", default="v41/dataset")
+    parser.add_argument("--manifest", default="v41/manifests/v41_uid_splits.json")
+    parser.add_argument(
+        "--gate1e-root", required=True,
+        help="root containing seed42/seed456/best_total.pt",
+    )
+    parser.add_argument("--runs", default="v42/runs/gate2c_seed42_456")
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--seeds", type=int, nargs="+", default=[42, 456])
+    parser.add_argument("--epochs", type=int, default=120)
+    parser.add_argument("--draws", type=int, default=40)
+    parser.add_argument("--lr", type=float, default=2e-4)
+    parser.add_argument("--accumulation", type=int, default=4)
+    parser.add_argument("--patience", type=int, default=20)
+    parser.add_argument("--plateau-patience", type=int, default=5)
+    parser.add_argument("--max-batches", type=int)
+    main(parser.parse_args())
