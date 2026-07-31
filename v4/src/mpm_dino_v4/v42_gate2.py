@@ -144,6 +144,7 @@ def _batch_targets_and_stages(batch):
 
 def run_gate2_epoch(
     model, loader, device, optimizer=None, accumulation=4, max_batches=None,
+    loss_options=None,
 ):
     training = optimizer is not None
     set_gate2_mode(model, training)
@@ -163,6 +164,7 @@ def run_gate2_epoch(
             losses = compute_v42_local_losses(
                 output, batch, targets=targets,
                 frame_weights=frame_weights,
+                **(loss_options or {}),
             )
             if training:
                 (losses.total / accumulation).backward()
@@ -500,6 +502,7 @@ def train_v42_gate2(
     root, manifest, gate1e_checkpoint, output, seed, device="cuda",
     epochs=120, draws_per_epoch=40, lr=2e-4, accumulation=4,
     patience=20, plateau_patience=5, resume=True, max_batches=None,
+    loss_options=None, experiment_name=None, model_contract_version=None,
 ):
     seed_all(seed)
     device = torch.device(device)
@@ -546,9 +549,27 @@ def train_v42_gate2(
         threshold=0.005, threshold_mode="rel", min_lr=1e-6,
     )
     source_path = Path(gate1e_checkpoint)
+    loss_options = dict(loss_options or {})
+    gate2b = bool(loss_options)
+    if gate2b:
+        required = {
+            "soft_deformation_amplification_cap",
+            "soft_deformation_quantile",
+            "soft_deformation_floor_fraction",
+            "family_balanced", "rigid_family_weight", "rigid_zero_weight",
+        }
+        if set(loss_options) != required:
+            raise ValueError(
+                "Gate-2B loss options must exactly match the reviewed contract"
+            )
     config = {
-        "experiment": "v42_gate2_geometry_only_canonical_local",
-        "model_contract_version": "gate2_geometry_only_v1",
+        "experiment": experiment_name or (
+            "v42_gate2b_family_balanced_deformation_scaled"
+            if gate2b else "v42_gate2_geometry_only_canonical_local"
+        ),
+        "model_contract_version": model_contract_version or (
+            "gate2b_geometry_only_v1" if gate2b else "gate2_geometry_only_v1"
+        ),
         "seed": seed, "device": str(device), "epochs": epochs,
         "draws_per_epoch": draws_per_epoch, "lr": lr,
         "accumulation": accumulation, "patience": patience,
@@ -574,7 +595,8 @@ def train_v42_gate2(
         ],
         "loss_weights": {
             "canonical": 1.0, "strain": 0.5, "edge_length": 0.25,
-            "local_velocity": 0.25, "rigid_zero": 0.25,
+            "local_velocity": 0.25,
+            "rigid_zero": loss_options.get("rigid_zero_weight", 0.25),
         },
         "timing_identifiability": {
             "target_peak_nrmse_floor": TIMING_FLOOR_NRMSE,
@@ -591,6 +613,24 @@ def train_v42_gate2(
         },
         "validation_global_bit_identity_checked_episodes": checked_before,
     }
+    if gate2b:
+        config["gate2b_loss_design"] = {
+            **loss_options,
+            "soft_scale": (
+                f"max(q{100 * loss_options['soft_deformation_quantile']:g} "
+                "target canonical RMS over frames, "
+                f"{loss_options['soft_deformation_floor_fraction']:g} * "
+                "reference radius)"
+            ),
+            "soft_amplification": (
+                "min(reference radius / detached soft scale, variant cap)"
+            ),
+            "amplified_terms": ["canonical", "local_velocity"],
+            "unchanged_terms": ["strain", "edge_length"],
+            "batch_size": 1,
+            "sampler": "strict alternating family UID-balanced draws",
+            "evaluation_screen": "unchanged_gate2_frozen_screen",
+        }
     (output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
     best, stale, start_epoch = float("inf"), 0, 1
     last_path = output / "last.pt"
@@ -615,13 +655,16 @@ def train_v42_gate2(
             train = run_gate2_epoch(
                 model, train_loader, device, optimizer,
                 accumulation, max_batches,
+                loss_options,
             )
             validation = run_gate2_epoch(
                 model, validation_loader, device, None,
                 accumulation, max_batches,
+                loss_options,
             )
             rows = gate2_rows(
-                model, validation_loader, device, "geometry_only",
+                model, validation_loader, device,
+                "geometry_only_gate2b" if gate2b else "geometry_only",
             )
             summary = summarize_gate2(rows)
             soft = summary["panel_Z/soft_body"]
@@ -664,7 +707,8 @@ def train_v42_gate2(
     best_state = torch.load(best_path, map_location=device, weights_only=False)
     model.load_state_dict(best_state["model"])
     learned_rows = gate2_rows(
-        model, validation_loader, device, "geometry_only",
+        model, validation_loader, device,
+        "geometry_only_gate2b" if gate2b else "geometry_only",
     )
     learned_summary = summarize_gate2(learned_rows)
     checked_after = verify_global_bit_identity(

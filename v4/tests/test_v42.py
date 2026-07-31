@@ -502,6 +502,83 @@ def test_gate2_local_loss_has_no_gradient_into_protected_global_path():
     assert protected_is_identical(model, snapshot)
 
 
+def test_gate2b_soft_scaling_amplifies_canonical_and_velocity_only():
+    sample = inputs(frames=7)
+    model = V42RotationAwareSurrogate(
+        local_mode="geometry", hidden_dim=32, blocks=1, heads=4,
+        dropout=0, frames=7, gradient_checkpointing=False,
+        local_trunk_alpha=0,
+    ).eval()
+    output = model(**sample)
+    target = rigid_trajectory(sample["x1"], 7)
+    target = target.clone()
+    ramp = torch.linspace(0, 1e-4, 7)
+    target[:, :, 0, 0] += ramp
+    batch = {
+        **sample, "target": target,
+        "target_mask": sample["input_mask"][:, None].expand(-1, 7, -1),
+        "family": ["soft_body"],
+    }
+    targets = canonical_targets(
+        batch["x1"], batch["target"], batch["input_mask"],
+        batch["target_mask"],
+    )
+    common = {
+        "targets": targets,
+        "frame_weights": torch.ones(1, 7),
+        "soft_deformation_quantile": 0.95,
+        "soft_deformation_floor_fraction": 0.005,
+        "family_balanced": True,
+        "rigid_family_weight": 0.25,
+        "rigid_zero_weight": 0.0,
+    }
+    x1 = compute_v42_local_losses(
+        output, batch, soft_deformation_amplification_cap=1, **common,
+    )
+    x5 = compute_v42_local_losses(
+        output, batch, soft_deformation_amplification_cap=5, **common,
+    )
+    assert x5.canonical > x1.canonical
+    assert x5.local_velocity > x1.local_velocity
+    assert torch.equal(x5.strain, x1.strain)
+    assert torch.equal(x5.edge_length, x1.edge_length)
+    assert torch.equal(x5.rigid_zero, x1.rigid_zero)
+
+
+def test_gate2b_rigid_family_weight_and_removed_extra_zero_term():
+    sample = inputs(frames=7)
+    model = V42RotationAwareSurrogate(
+        local_mode="geometry", hidden_dim=32, blocks=1, heads=4,
+        dropout=0, frames=7, gradient_checkpointing=False,
+    ).eval()
+    with torch.no_grad():
+        model.canonical_head[-1].weight[0].fill_(1e-3)
+    output = model(**sample)
+    batch = {
+        **sample, "target": rigid_trajectory(sample["x1"], 7),
+        "target_mask": sample["input_mask"][:, None].expand(-1, 7, -1),
+        "family": ["rigid"],
+    }
+    common = {
+        "soft_deformation_amplification_cap": 20,
+        "soft_deformation_quantile": 0.95,
+        "soft_deformation_floor_fraction": 0.005,
+        "family_balanced": True,
+        "rigid_zero_weight": 0.0,
+    }
+    full = compute_v42_local_losses(
+        output, batch, rigid_family_weight=1.0, **common,
+    )
+    quarter = compute_v42_local_losses(
+        output, batch, rigid_family_weight=0.25, **common,
+    )
+    assert torch.allclose(quarter.total, 0.25 * full.total)
+    assert torch.allclose(quarter.canonical, 0.25 * full.canonical)
+    assert torch.allclose(quarter.strain, 0.25 * full.strain)
+    assert torch.allclose(quarter.edge_length, 0.25 * full.edge_length)
+    assert torch.allclose(quarter.local_velocity, 0.25 * full.local_velocity)
+
+
 def test_zero_local_baseline_is_exactly_zero_with_gate1e_rotation():
     sample = inputs(frames=5)
     model = V42RotationAwareSurrogate(

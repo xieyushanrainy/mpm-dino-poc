@@ -276,3 +276,74 @@ the target peak, and peak is the first maximum. No test data set this rule.
 
 This command starts Gate 2 only. It cannot launch Gate 3 and cannot train a
 real-DINO condition.
+
+### Gate-2 result
+
+The retrieved two-seed Gate-2 matrix under `v42/run/gate2_seed42_456` is
+complete and integrity-valid, but it fails the frozen screen. Two-seed soft
+Panel-Z improvement is only `0.435%` for stage-weighted canonical NRMSE and
+`0.074%` for strain RMSE, versus the required `10%`. Magnitude correlations
+are `0.299` and `0.287`; learned onset is not detected and median peak timing
+error is 52 frames for both seeds. Rigid local RMS and frozen COM/rotation
+identity pass their safety checks.
+
+The full validation-only report is
+[`run/gate2_seed42_456/analysis_20260731/RESULTS.md`](run/gate2_seed42_456/analysis_20260731/RESULTS.md).
+Gate 3 / real-DINO training remains unauthorized.
+
+## Gate 2B: family-balanced deformation-signal diagnostic
+
+Gate 2B is an isolated follow-up to the failed Gate-2 screen. It does not
+overwrite Gate 2, authorize Gate 3, use test data, or train real DINO. It tests
+whether the near-zero solution was encouraged by duplicated rigid supervision
+and weak soft-deformation scaling while keeping the model, data split, stage
+weights, checkpoint selection and frozen evaluation screen unchanged.
+
+The reviewed variants are:
+
+| Variant | Explicit rigid-family coefficient | Extra rigid-zero term | Maximum soft amplification |
+|---|---:|---:|---:|
+| `balanced_x1` | 0.25 | 0 | 1x |
+| `balanced_x5` | 0.25 | 0 | 5x |
+| `balanced_x20` | 0.25 | 0 | 20x |
+
+Training batches remain size one and the UID-balanced sampler alternates soft
+and rigid families exactly; the runner rejects an odd draw count. For each soft
+episode, it computes one detached scale
+
+```text
+max(q95 framewise target canonical RMS, 0.005 * reference radius)
+```
+
+and applies `min(radius / scale, variant cap)` to canonical-displacement and
+local-velocity residuals. A single episode-level scale preserves relative
+frame magnitudes and timing. Strain and edge-length terms retain their existing
+normalization. Rigid canonical, strain, edge and velocity supervision remains,
+but its aggregate contribution is multiplied by 0.25 and the additional
+rigid-zero term is removed. Rigid safety is still enforced by the unchanged
+`<0.1%` reference-radius validation threshold.
+
+The existing Gate-2 run is the matched legacy control, so the Gate-2B runner
+starts only the three new variants. From a csh/tcsh lab-server shell:
+
+```csh
+mkdir -p v42/runs/gate2b_seed42_456
+setenv PYTHONPATH "v2/src:v3/src:v4/src"
+nohup .venv-v41/bin/python -u v42/run_gate2b.py \
+  --device cuda \
+  --seeds 42 456 \
+  --variants balanced_x1 balanced_x5 balanced_x20 \
+  --epochs 120 \
+  --draws 40 \
+  --patience 20 \
+  --plateau-patience 5 \
+  --gate1e-root v42/runs/gate1e_seed42_456 \
+  --runs v42/runs/gate2b_seed42_456 \
+  >& v42/runs/gate2b_seed42_456/console.log &
+echo $! > v42/runs/gate2b_seed42_456/launcher.pid
+```
+
+As with Gate 2, use `--gate1e-root v42/run/gate1e_seed42_456` if the reviewed
+source checkpoints are under the downloaded singular `run` directory. Each
+variant/seed writes to its own directory and records its complete loss contract,
+source hashes, frozen-path identity checks and unchanged Gate-2 screen outcome.

@@ -193,6 +193,12 @@ def compute_v42_local_losses(
     targets: CanonicalTargets | None = None,
     frame_weights: Tensor | None = None,
     beta: float = 0.01,
+    soft_deformation_amplification_cap: float = 1.0,
+    soft_deformation_quantile: float = 0.95,
+    soft_deformation_floor_fraction: float = 0.005,
+    family_balanced: bool = False,
+    rigid_family_weight: float = 1.0,
+    rigid_zero_weight: float = 0.25,
 ) -> V42LocalLosses:
     """Approved canonical-local objective, with no world/global loss path."""
     mask = batch["target_mask"]
@@ -205,12 +211,37 @@ def compute_v42_local_losses(
         [family == "rigid" for family in batch["family"]],
         device=output.com.device, dtype=torch.bool,
     )
+    if soft_deformation_amplification_cap < 1:
+        raise ValueError("soft deformation amplification cap must be >= 1")
+    if not 0 <= soft_deformation_quantile <= 1:
+        raise ValueError("soft deformation quantile must be in [0, 1]")
+    if soft_deformation_floor_fraction <= 0:
+        raise ValueError("soft deformation floor fraction must be positive")
+    if rigid_family_weight < 0 or rigid_zero_weight < 0:
+        raise ValueError("rigid weights must be non-negative")
+    target_rms = torch.sqrt(
+        (
+            targets.displacement.square().sum(-1)
+            * mask.to(targets.displacement.dtype)
+        ).sum(2) / mask.sum(2).clamp_min(1)
+    )
+    soft_scale = torch.quantile(
+        target_rms, soft_deformation_quantile, dim=1,
+    ).maximum(soft_deformation_floor_fraction * radius)
+    soft_amplification = (radius / soft_scale).clamp(
+        min=1.0, max=soft_deformation_amplification_cap,
+    )
+    deformation_amplification = torch.where(
+        rigid_objects, torch.ones_like(soft_amplification),
+        soft_amplification,
+    ).detach()
     rigid_mask = mask & rigid_objects[:, None, None]
 
     canonical_mask = mask & targets.valid_rotation[:, :, None]
     canonical = _weighted_huber(
         (output.canonical_displacement - targets.displacement)
-        / radius[:, None, None, None],
+        / radius[:, None, None, None]
+        * deformation_amplification[:, None, None, None],
         canonical_mask, frame_weights, beta,
     )
     batch_size, frames, points, _ = output.canonical_shape.shape
@@ -248,7 +279,10 @@ def compute_v42_local_losses(
             output.canonical_displacement[:, 1:]
             - output.canonical_displacement[:, :-1]
             - targets.displacement[:, 1:] + targets.displacement[:, :-1]
-        ) / radius[:, None, None, None],
+        ) / radius[:, None, None, None]
+        * deformation_amplification[:, None, None, None],
+        # Amplify the complete soft trajectory by one detached, per-episode
+        # factor. Per-frame scaling would erase the magnitude trajectory.
         canonical_mask[:, 1:] & canonical_mask[:, :-1],
         frame_weights[:, 1:] if frame_weights is not None else None,
         beta,
@@ -257,9 +291,22 @@ def compute_v42_local_losses(
         output.canonical_displacement / radius[:, None, None, None],
         rigid_mask, frame_weights, beta,
     )
+    if family_balanced:
+        if len(set(batch["family"])) != 1:
+            raise ValueError(
+                "family-balanced Gate-2B loss requires homogeneous batches"
+            )
+        family_weight = (
+            rigid_family_weight if bool(rigid_objects[0]) else 1.0
+        )
+        canonical = canonical * family_weight
+        strain = strain * family_weight
+        edge_length = edge_length * family_weight
+        local_velocity = local_velocity * family_weight
+        rigid_zero = rigid_zero * family_weight
     local_total = (
         canonical + 0.50 * strain + 0.25 * edge_length
-        + 0.25 * local_velocity + 0.25 * rigid_zero
+        + 0.25 * local_velocity + rigid_zero_weight * rigid_zero
     )
     return V42LocalLosses(
         local_total, canonical, strain, edge_length, local_velocity, rigid_zero,
