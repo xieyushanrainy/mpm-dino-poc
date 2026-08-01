@@ -163,6 +163,7 @@ def run_gate2_epoch(
     model, loader, device, optimizer=None, accumulation=4, max_batches=None,
     loss_options=None, stage_weight_mode="per_frame",
     condition_builder=None,
+    objective_builder=None,
 ):
     if stage_weight_mode not in {"per_frame", "total_mass"}:
         raise ValueError(f"unknown stage weight mode: {stage_weight_mode}")
@@ -191,8 +192,14 @@ def run_gate2_epoch(
                 frame_weights=frame_weights,
                 **(loss_options or {}),
             )
+            optimized = (
+                objective_builder(
+                    output, batch, targets, stages, frame_weights, losses,
+                )
+                if objective_builder is not None else losses.total
+            )
             if training:
-                (losses.total / accumulation).backward()
+                (optimized / accumulation).backward()
                 if (batches + 1) % accumulation == 0:
                     torch.nn.utils.clip_grad_norm_(parameters, 1.0)
                     optimizer.step()
@@ -202,6 +209,9 @@ def run_gate2_epoch(
                 totals[name] = totals.get(name, 0.0) + float(
                     value.detach().cpu()
                 )
+            totals["optimized"] = totals.get("optimized", 0.0) + float(
+                optimized.detach().cpu()
+            )
             batches += 1
             if max_batches and batches >= max_batches:
                 break
@@ -542,6 +552,8 @@ def train_v42_gate2(
     stage_weight_mode="per_frame",
     oracle_condition_dim=0, condition_builder=None,
     condition_name=None, exploratory_control=False,
+    objective_builder=None, objective_name=None,
+    dataset_families=("soft_body", "rigid"), selection_mode="legacy",
 ):
     seed_all(seed)
     device = torch.device(device)
@@ -549,11 +561,11 @@ def train_v42_gate2(
     output.mkdir(parents=True, exist_ok=True)
     train_ds = V41TrajectoryDataset(
         root, manifest, "train", "zero", seed,
-        families=("soft_body", "rigid"),
+        families=dataset_families,
     )
     validation_ds = V41TrajectoryDataset(
         root, manifest, "validation", "zero", seed,
-        families=("soft_body", "rigid"),
+        families=dataset_families,
     )
     sampler = UIDBalancedSampler(train_ds, draws_per_epoch, seed)
     train_loader = DataLoader(
@@ -663,6 +675,9 @@ def train_v42_gate2(
             "exploratory_controlled_group_not_a_gate"
             if exploratory_control else "gate"
         ),
+        "training_objective": objective_name or "composite_local",
+        "dataset_families": list(dataset_families),
+        "selection_mode": selection_mode,
     }
     if gate2b:
         config["gate2b_loss_design"] = {
@@ -724,6 +739,7 @@ def train_v42_gate2(
                 loss_options,
                 stage_weight_mode,
                 condition_builder,
+                objective_builder,
             )
             validation = run_gate2_epoch(
                 model, validation_loader, device, None,
@@ -731,6 +747,7 @@ def train_v42_gate2(
                 loss_options,
                 stage_weight_mode,
                 condition_builder,
+                objective_builder,
             )
             rows = gate2_rows(
                 model, validation_loader, device,
@@ -742,7 +759,8 @@ def train_v42_gate2(
             summary = summarize_gate2(rows)
             soft = summary["panel_Z/soft_body"]
             selection = (
-                soft["stage_weighted_canonical_nrmse"]
+                validation["optimized"] if selection_mode == "optimized"
+                else soft["stage_weighted_canonical_nrmse"]
                 + soft["stage_weighted_strain_rmse"]
             )
             scheduler.step(selection)

@@ -9,6 +9,7 @@ import torch
 from torch.nn import functional as F
 
 from .v42_gate2 import train_v42_gate2
+from .v42_stages import ImpactStage
 
 
 TEMPORAL_DIM = 8  # seven stage indicators plus event-relative time
@@ -105,6 +106,65 @@ def train_oracle_variant(
         condition_name=variant, exploratory_control=True,
         experiment_name="v42_oracle_controlled_group_" + variant,
         model_contract_version="oracle_controlled_group_v1",
+        **kwargs,
+    )
+
+
+EVENT_STAGES = (
+    ImpactStage.CONTACT_ONSET,
+    ImpactStage.COMPRESSION,
+    ImpactStage.PEAK_DEFORMATION,
+)
+
+
+def event_normalized_canonical_mse(
+    output, batch, targets, stages, _frame_weights, _losses,
+):
+    """Episode-amplitude-normalized MSE on soft event frames only.
+
+    The detached RMS target displacement over contact/compression/peak frames
+    is the scale. Consequently, predicting zero has loss one (up to numerical
+    precision) for every nonzero episode, independent of deformation amplitude.
+    """
+    labels = stages.labels[:, 1:]
+    selected = torch.zeros_like(labels, dtype=torch.bool)
+    for stage in EVENT_STAGES:
+        selected |= labels.eq(int(stage))
+    valid = (
+        batch["target_mask"]
+        & targets.valid_rotation[:, :, None]
+        & selected[:, :, None]
+    )
+    count = valid.sum((1, 2)).clamp_min(1)
+    target_energy = (
+        targets.displacement.square().sum(-1) * valid
+    ).sum((1, 2)) / count
+    floor = (1e-6 * targets.radius).square()
+    scale_squared = target_energy.maximum(floor).detach()
+    error_energy = (
+        (output.canonical_displacement - targets.displacement)
+        .square().sum(-1) * valid
+    ).sum((1, 2)) / count
+    return (error_energy / scale_squared).mean()
+
+
+def train_event_normalized_variant(
+    dataset_root, manifest, checkpoint, output, seed, variant, **kwargs,
+):
+    if variant not in {"geometry_control", "oracle_temporal"}:
+        raise ValueError("focused diagnostic supports geometry and temporal only")
+    temporal = variant == "oracle_temporal"
+    builder = OracleConditionBuilder(dataset_root, temporal, False)
+    return train_v42_gate2(
+        dataset_root, manifest, checkpoint, output, seed,
+        loss_options=LOSS_CONTRACT, stage_weight_mode="total_mass",
+        oracle_condition_dim=ORACLE_DIM, condition_builder=builder,
+        condition_name=variant, exploratory_control=True,
+        objective_builder=event_normalized_canonical_mse,
+        objective_name="event_frame_amplitude_normalized_canonical_mse_v1",
+        dataset_families=("soft_body",), selection_mode="optimized",
+        experiment_name="v42_event_normalized_" + variant,
+        model_contract_version="event_normalized_temporal_control_v1",
         **kwargs,
     )
 

@@ -342,6 +342,39 @@ echo $! > v42/runs/oracle_controls_seed42_456/launcher.pid
 Use singular `v42/run/gate1e_seed42_456` if that is where the downloaded
 Gate-1E checkpoints live.
 
+### Focused event-normalized temporal diagnostic
+
+Following the oracle controlled-group result, this two-arm diagnostic removes
+two remaining static-solution advantages. Training contains soft bodies only and
+the reconstruction objective sees only contact-onset, compression and
+peak-deformation frames. Each episode's canonical squared error is divided by
+the detached target deformation energy over exactly those frames. A prediction
+of zero therefore has objective value approximately one for every episode,
+regardless of its absolute deformation amplitude.
+
+`geometry_control` and `oracle_temporal` retain the same 15-channel decoder and
+differ only in whether the temporal channels contain the target-derived stage
+and event-relative time or zeros. Checkpoint selection uses the same normalized
+validation objective. Full-trajectory metrics remain descriptive outputs. This
+is not a gate and does not use material inputs, real DINO, rigid training, test
+data, or Gate 3.
+
+```csh
+mkdir -p v42/runs/event_normalized_temporal_seed42_456
+setenv PYTHONPATH "v2/src:v3/src:v4/src"
+nohup .venv-v41/bin/python -u v42/run_event_normalized_temporal.py \
+  --device cuda \
+  --seeds 42 456 \
+  --epochs 120 \
+  --draws 40 \
+  --patience 20 \
+  --plateau-patience 5 \
+  --gate1e-root v42/runs/gate1e_seed42_456 \
+  --runs v42/runs/event_normalized_temporal_seed42_456 \
+  >& v42/runs/event_normalized_temporal_seed42_456/console.log &
+echo $! > v42/runs/event_normalized_temporal_seed42_456/launcher.pid
+```
+
 ## Diagnostic 1: decoder single-example overfit
 
 The next diagnostic follows the frozen order established after Gate 2C. It asks

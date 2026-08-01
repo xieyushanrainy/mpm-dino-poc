@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
 import numpy as np
 import torch
@@ -35,6 +36,7 @@ from mpm_dino_v4.v42_overfit import (
 )
 from mpm_dino_v4.v42_oracle import (
     MATERIAL_DIM, ORACLE_DIM, TEMPORAL_DIM, material_vector,
+    event_normalized_canonical_mse,
 )
 
 
@@ -105,6 +107,32 @@ def test_oracle_decoder_matches_zero_initialization_and_receives_gradient():
     conditioned.canonical_displacement.square().sum().backward()
     assert model.oracle_canonical_head[-1].weight.grad is not None
     assert TEMPORAL_DIM + MATERIAL_DIM == ORACLE_DIM
+
+
+def test_event_normalized_objective_makes_zero_prediction_unit_loss():
+    target = torch.tensor([[[[1., 0., 0.]], [[2., 0., 0.]], [[9., 0., 0.]]]])
+    output = SimpleNamespace(canonical_displacement=torch.zeros_like(target))
+    targets = SimpleNamespace(
+        displacement=target, valid_rotation=torch.ones(1, 3, dtype=torch.bool),
+        radius=torch.ones(1),
+    )
+    stages = SimpleNamespace(labels=torch.tensor([[
+        1, int(ImpactStage.CONTACT_ONSET),
+        int(ImpactStage.PEAK_DEFORMATION), int(ImpactStage.RECOVERY),
+    ]]))
+    batch = {"target_mask": torch.ones(1, 3, 1, dtype=torch.bool)}
+    loss = event_normalized_canonical_mse(
+        output, batch, targets, stages, None, None,
+    )
+    assert torch.allclose(loss, torch.tensor(1.0))
+    # Recovery is excluded: matching the two selected frames is perfect even
+    # though the final recovery-frame prediction remains zero.
+    output.canonical_displacement[:, :2] = target[:, :2]
+    assert torch.equal(
+        event_normalized_canonical_mse(
+            output, batch, targets, stages, None, None,
+        ), torch.tensor(0.0),
+    )
 
 
 def test_rotation_6d_identity_is_proper():
