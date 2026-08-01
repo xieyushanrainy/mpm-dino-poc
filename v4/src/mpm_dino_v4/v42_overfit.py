@@ -21,7 +21,9 @@ from .v42_stages import total_mass_stage_weights
 
 
 OVERFIT_MODES = ("single_frame", "single_episode")
-OVERFIT_OBJECTIVES = ("composite", "canonical_only")
+OVERFIT_OBJECTIVES = (
+    "composite", "canonical_only", "composite_canonical_mse",
+)
 LOSS_OPTIONS = {
     "soft_deformation_amplification_cap": 1.0,
     "soft_deformation_quantile": 0.95,
@@ -171,11 +173,34 @@ def overfit_passed(mode, metrics):
     )
 
 
-def select_overfit_objective(losses, objective):
+def normalized_canonical_mse(
+    output, targets, target_mask, frame_weights=None,
+):
+    """Radius-normalized pointwise MSE whose square root is canonical NRMSE."""
+    valid = target_mask & targets.valid_rotation[:, :, None]
+    squared = (
+        (output.canonical_displacement - targets.displacement)
+        / targets.radius[:, None, None, None]
+    ).square().sum(-1)
+    weight = valid.to(squared.dtype)
+    if frame_weights is not None:
+        weight = weight * frame_weights[:, :, None]
+    return (squared * weight).sum() / weight.sum().clamp_min(1)
+
+
+def select_overfit_objective(losses, objective, canonical_mse=None):
     if objective == "composite":
         return losses.total
     if objective == "canonical_only":
         return losses.canonical
+    if objective == "composite_canonical_mse":
+        if canonical_mse is None:
+            raise ValueError("composite canonical MSE requires canonical_mse")
+        return (
+            canonical_mse + 0.50 * losses.strain
+            + 0.25 * losses.edge_length + 0.25 * losses.local_velocity
+            + LOSS_OPTIONS["rigid_zero_weight"] * losses.rigid_zero
+        )
     raise ValueError(f"unknown overfit objective: {objective}")
 
 
@@ -188,8 +213,8 @@ def train_overfit_mode(
         raise ValueError(f"unknown overfit mode: {mode}")
     if objective not in OVERFIT_OBJECTIVES:
         raise ValueError(f"unknown overfit objective: {objective}")
-    if objective == "canonical_only" and mode != "single_frame":
-        raise ValueError("canonical-only audit is defined for single_frame only")
+    if objective != "composite" and mode != "single_frame":
+        raise ValueError(f"{objective} audit is defined for single_frame only")
     seed_all(seed)
     device = torch.device(device)
     output = Path(output)
@@ -249,7 +274,12 @@ def train_overfit_mode(
                 prediction, loss_batch, targets=targets,
                 frame_weights=frame_weights, **LOSS_OPTIONS,
             )
-            optimized_loss = select_overfit_objective(losses, objective)
+            canonical_mse = normalized_canonical_mse(
+                prediction, targets, loss_batch["target_mask"], frame_weights,
+            )
+            optimized_loss = select_overfit_objective(
+                losses, objective, canonical_mse,
+            )
             optimized_loss.backward()
             gradient_norm = torch.nn.utils.clip_grad_norm_(parameters, 10.0)
             optimizer.step()
@@ -266,6 +296,7 @@ def train_overfit_mode(
                 "step": step,
                 "objective": objective,
                 "optimized_loss": float(optimized_loss.detach()),
+                "canonical_mse": float(canonical_mse.detach()),
                 "loss": float(losses.total.detach()),
                 "canonical_loss": float(losses.canonical.detach()),
                 "strain_loss": float(losses.strain.detach()),
@@ -305,8 +336,9 @@ def train_overfit_mode(
     )
     result = {
         "experiment": (
-            "v42_decoder_canonical_only_overfit"
-            if objective == "canonical_only"
+            "v42_decoder_canonical_only_overfit" if objective == "canonical_only"
+            else "v42_decoder_composite_canonical_mse_overfit"
+            if objective == "composite_canonical_mse"
             else "v42_decoder_learnability_overfit"
         ),
         "mode": mode,
@@ -330,6 +362,14 @@ def train_overfit_mode(
         "best_checkpoint_sha256": file_sha256(output / "best.pt"),
         "trainable_prefixes": list(LOCAL_PREFIXES),
         "loss_contract": LOSS_OPTIONS,
+        "optimized_loss_contract": (
+            {
+                "canonical": "radius_normalized_pointwise_mse",
+                "strain": 0.50, "edge_length": 0.25,
+                "local_velocity": 0.25, "rigid_zero": 0.0,
+            }
+            if objective == "composite_canonical_mse" else objective
+        ),
     }
     result_path = output / "OVERFIT_RESULT.json"
     result_path.write_text(json.dumps(result, indent=2) + "\n")

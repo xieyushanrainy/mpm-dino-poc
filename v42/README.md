@@ -392,6 +392,59 @@ conflict becomes the leading explanation. If 1B also fails, the next audit must
 target spatial representation, decoder capacity or conditioning. Neither result
 directly authorizes temporal, material or learned-DINO experiments.
 
+#### Diagnostic-1B result
+
+The downloaded canonical-only run is complete and integrity-valid but fails the
+unchanged one-frame gate. Canonical NRMSE falls `71.36%` versus `70.55%` under
+the composite objective, only a `0.81` percentage-point gain and far below the
+required `95%`. Predicted magnitude is correct (`95.89%` of target), while
+pointwise residual remains `28.64%` of target RMS. Removing auxiliary-loss
+gradients therefore does not remove the spatial reconstruction ceiling.
+
+The analysis report is
+[`run/canonical_overfit_seed42/analysis_20260801/RESULTS.md`](run/canonical_overfit_seed42/analysis_20260801/RESULTS.md).
+The smallest next isolation is a matched normalized-MSE one-frame fit; temporal,
+material and learned-DINO stages remain unauthorized.
+
+### Diagnostic 1C: restored composite with normalized canonical MSE
+
+Diagnostic 1C restores the auxiliary objective from Diagnostic 1 and changes
+only the canonical error geometry:
+
+```text
+canonical_mse = sum(mask * ||prediction - target||^2 / radius^2) / sum(mask)
+objective = canonical_mse + 0.50 strain + 0.25 edge + 0.25 local_velocity
+```
+
+The square root of `canonical_mse` is exactly the reported canonical NRMSE, so
+large pointwise residuals now receive gradients proportional to their size.
+The selected UID/frame, initialization, zero-DINO pathway, optimizer, 2,000-step
+budget and auxiliary coefficients are unchanged. The original 95% reduction
+criterion is retained as a strict near-exact diagnostic for direct comparison;
+analysis should also report non-collapse capability separately rather than use
+that strict threshold as the sole progression criterion.
+
+From a csh/tcsh lab-server shell:
+
+```csh
+mkdir -p v42/runs/mse_overfit_seed42
+setenv PYTHONPATH "v2/src:v3/src:v4/src"
+nohup .venv-v41/bin/python -u v42/run_mse_overfit.py \
+  --device cuda \
+  --seed 42 \
+  --steps 2000 \
+  --lr 1e-3 \
+  --log-every 25 \
+  --gate1e-root v42/runs/gate1e_seed42_456 \
+  --runs v42/runs/mse_overfit_seed42 \
+  >& v42/runs/mse_overfit_seed42/console.log &
+echo $! > v42/runs/mse_overfit_seed42/launcher.pid
+```
+
+Use singular `v42/run/gate1e_seed42_456` if appropriate. This experiment does
+not load validation/test data or train DINO, and it does not automatically
+authorize later stages.
+
 ## Gate 2B: family-balanced deformation-signal diagnostic
 
 Gate 2B is an isolated follow-up to the failed Gate-2 screen. It does not

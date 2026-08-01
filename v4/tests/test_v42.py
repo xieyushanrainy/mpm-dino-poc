@@ -31,7 +31,7 @@ from mpm_dino_v4.v42_gate2 import (
     protected_is_identical, protected_snapshot,
 )
 from mpm_dino_v4.v42_overfit import (
-    overfit_passed, select_overfit_objective,
+    normalized_canonical_mse, overfit_passed, select_overfit_objective,
 )
 
 
@@ -422,6 +422,31 @@ def test_canonical_overfit_objective_excludes_composite_auxiliary_terms():
 
     assert select_overfit_objective(Losses, "composite") is Losses.total
     assert select_overfit_objective(Losses, "canonical_only") is Losses.canonical
+
+
+def test_normalized_mse_matches_squared_canonical_nrmse_and_composite_weights():
+    class Output:
+        canonical_displacement = torch.tensor([[[[2.0, 0.0, 0.0]]]])
+
+    class Targets:
+        displacement = torch.zeros_like(Output.canonical_displacement)
+        radius = torch.tensor([2.0])
+        valid_rotation = torch.tensor([[True]])
+
+    mask = torch.tensor([[[True]]])
+    mse = normalized_canonical_mse(Output, Targets, mask)
+    assert torch.equal(mse, torch.tensor(1.0))
+
+    class Losses:
+        strain = torch.tensor(2.0)
+        edge_length = torch.tensor(4.0)
+        local_velocity = torch.tensor(8.0)
+        rigid_zero = torch.tensor(100.0)
+
+    objective = select_overfit_objective(
+        Losses, "composite_canonical_mse", mse,
+    )
+    assert torch.equal(objective, torch.tensor(5.0))
 
 
 def test_separated_losses_are_finite_and_backward():
