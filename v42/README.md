@@ -291,6 +291,50 @@ The full validation-only report is
 [`run/gate2_seed42_456/analysis_20260731/RESULTS.md`](run/gate2_seed42_456/analysis_20260731/RESULTS.md).
 Gate 3 / real-DINO training remains unauthorized.
 
+## Diagnostic 1: decoder single-example overfit
+
+The next diagnostic follows the frozen order established after Gate 2C. It asks
+whether the existing protected local branch can represent and optimize an
+unambiguously nonzero deformation before adding temporal or material inputs.
+
+`run_decoder_overfit.py` deterministically selects the Panel-Z soft training
+episode with the largest canonical deformation, using the training split only.
+It then runs two independent fits from the reviewed Gate-1E source:
+
+1. `single_frame`: fit only that episode's peak-deformation frame;
+2. `single_episode`: fit all 59 target frames of the same episode with the
+   Gate-2C total-mass stage weights.
+
+COM, rotation and the physical trunk remain frozen. DINO is zero, and neither
+validation nor test data is loaded. A low scalar loss is insufficient to pass:
+the single-frame fit must reduce canonical error by at least 95% and recover
+90–110% of target magnitude. The episode fit must additionally reach at least
+0.95 magnitude correlation, recover 90–110% of target peak magnitude and place
+the peak within one frame. Failure of the single-frame check stops the matrix,
+because a temporal-conditioning experiment would then be premature.
+
+From a csh/tcsh lab-server shell:
+
+```csh
+mkdir -p v42/runs/decoder_overfit_seed42
+setenv PYTHONPATH "v2/src:v3/src:v4/src"
+nohup .venv-v41/bin/python -u v42/run_decoder_overfit.py \
+  --device cuda \
+  --seed 42 \
+  --steps 2000 \
+  --lr 1e-3 \
+  --log-every 25 \
+  --gate1e-root v42/runs/gate1e_seed42_456 \
+  --runs v42/runs/decoder_overfit_seed42 \
+  >& v42/runs/decoder_overfit_seed42/console.log &
+echo $! > v42/runs/decoder_overfit_seed42/launcher.pid
+```
+
+Use singular `v42/run/gate1e_seed42_456` when that is the lab-server source
+location. `DIAGNOSTIC_SUMMARY.json` authorizes oracle temporal conditioning only
+when both fits pass. Oracle material conditioning and learned DINO remain
+unauthorized until their preceding diagnostics are successful.
+
 ## Gate 2B: family-balanced deformation-signal diagnostic
 
 Gate 2B is an isolated follow-up to the failed Gate-2 screen. It does not
@@ -347,3 +391,80 @@ As with Gate 2, use `--gate1e-root v42/run/gate1e_seed42_456` if the reviewed
 source checkpoints are under the downloaded singular `run` directory. Each
 variant/seed writes to its own directory and records its complete loss contract,
 source hashes, frozen-path identity checks and unchanged Gate-2 screen outcome.
+
+### Gate-2B result
+
+The retrieved six-run Gate-2B matrix under `v42/run/gate2b_seed42_456` is
+complete and integrity-valid, but every variant fails the unchanged Gate-2
+screen. `balanced_x1` is numerically best with only `0.584%` canonical-NRMSE
+and `0.080%` strain-RMSE improvement. The 5x and 20x variants do not amplify
+predicted deformation behavior: magnitude correlation remains below `0.31`, no
+onset is detected, and median peak timing error remains 51–52 frames. Rigid
+safety and frozen COM/rotation identity pass in all runs.
+
+The validation-only report is
+[`run/gate2b_seed42_456/analysis_20260731/RESULTS.md`](run/gate2b_seed42_456/analysis_20260731/RESULTS.md).
+Gate 3 / real-DINO training remains unauthorized.
+
+## Gate 2C: total-mass stage-balanced diagnostic
+
+Gate 2C isolates temporal frame imbalance while retaining the numerically best
+Gate-2B condition, `balanced_x1`: family-balanced batches, rigid-family
+coefficient `0.25`, no extra rigid-zero term, and no soft deformation
+amplification. Only the training-frame weights change.
+
+For each stage present in an episode, frame weights are computed as
+
+```text
+unnormalized_weight[t] = stage_importance[stage[t]] / frames_in_stage[stage[t]]
+weight = unnormalized_weight / mean(unnormalized_weight)
+```
+
+Consequently, the total weight of a stage is proportional to its declared
+importance rather than its saved-frame count. The existing importance values
+remain `1/2/3/4/3/1` for free flight, contact onset, compression, peak,
+recovery and post-event. Weights are computed over the 59 target frames only,
+are detached target-derived preprocessing and are not model inputs. There is no
+weight cap: retaining the historical cap of 4 would specifically suppress rare
+one-frame stages and undo total-mass balancing. Mean episode weight remains one.
+
+Validation reporting, checkpoint selection and the complete frozen Gate-2
+screen continue to use the historical evaluation definition. Gate 2C therefore
+tests training supervision only and remains directly comparable with
+`balanced_x1`.
+
+From a csh/tcsh lab-server shell:
+
+```csh
+mkdir -p v42/runs/gate2c_seed42_456
+setenv PYTHONPATH "v2/src:v3/src:v4/src"
+nohup .venv-v41/bin/python -u v42/run_gate2c.py \
+  --device cuda \
+  --seeds 42 456 \
+  --epochs 120 \
+  --draws 40 \
+  --patience 20 \
+  --plateau-patience 5 \
+  --gate1e-root v42/runs/gate1e_seed42_456 \
+  --runs v42/runs/gate2c_seed42_456 \
+  >& v42/runs/gate2c_seed42_456/console.log &
+echo $! > v42/runs/gate2c_seed42_456/launcher.pid
+```
+
+Use `--gate1e-root v42/run/gate1e_seed42_456` if the reviewed sources are under
+the downloaded singular `run` directory. The runner trains Gate 2C only: it
+does not use test data, train real DINO or dispatch Gate 3.
+
+### Gate-2C result
+
+The retrieved two-seed run under `v42/run/gate2c_seed42_456` is complete and
+integrity-valid, but it fails the unchanged Gate-2 screen. Total-mass balancing
+was active and strongly upweighted rare frames, yet two-seed improvement over
+zero-local is only `0.665%` canonical NRMSE and `0.073%` strain RMSE. Predicted
+peaks remain only `3.2–3.4%` of target magnitude, onset is never detected, and
+median peak error is 52 frames. Rigid safety passes narrowly, reaching `0.0986%`
+of reference radius against the `0.1%` maximum.
+
+The validation-only report is
+[`run/gate2c_seed42_456/analysis_20260801/RESULTS.md`](run/gate2c_seed42_456/analysis_20260801/RESULTS.md).
+Gate 3 / real-DINO training remains unauthorized.

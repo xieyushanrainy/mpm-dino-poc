@@ -30,6 +30,7 @@ from mpm_dino_v4.v42_gate2 import (
     LOCAL_PREFIXES, gate2_screen, load_gate1e_source, local_parameters,
     protected_is_identical, protected_snapshot,
 )
+from mpm_dino_v4.v42_overfit import overfit_passed
 
 
 def inputs(n=16, frames=7):
@@ -388,6 +389,28 @@ def test_gate1_optimizer_excludes_every_local_and_visual_parameter():
         id(parameter) in selected
         for parameter in model.rotation_head.parameters()
     )
+
+
+def test_decoder_overfit_gates_require_scale_and_timing_not_just_low_loss():
+    frame = {
+        "finite": True,
+        "canonical_error_reduction": 0.96,
+        "predicted_to_target_magnitude_ratio": 1.02,
+    }
+    assert overfit_passed("single_frame", frame)
+    frame["predicted_to_target_magnitude_ratio"] = 0.1
+    assert not overfit_passed("single_frame", frame)
+
+    episode = {
+        "finite": True,
+        "canonical_error_reduction": 0.97,
+        "magnitude_correlation": 0.98,
+        "predicted_to_target_peak_ratio": 0.95,
+        "peak_timing_error_frames": 1,
+    }
+    assert overfit_passed("single_episode", episode)
+    episode["peak_timing_error_frames"] = 2
+    assert not overfit_passed("single_episode", episode)
 
 
 def test_separated_losses_are_finite_and_backward():
