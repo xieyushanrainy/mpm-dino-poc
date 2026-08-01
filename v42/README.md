@@ -335,6 +335,63 @@ location. `DIAGNOSTIC_SUMMARY.json` authorizes oracle temporal conditioning only
 when both fits pass. Oracle material conditioning and learned DINO remain
 unauthorized until their preceding diagnostics are successful.
 
+### Decoder-overfit result
+
+The downloaded seed-42 run is complete and integrity-valid, but `single_frame`
+fails the frozen gate and correctly stops before `single_episode`. It recovers
+`97.76%` of target aggregate magnitude and a meaningful spatial pattern
+(`0.956` component correlation), but canonical error falls only `70.55%`
+instead of the required `95%`; residual RMS remains `29.45%` of target RMS.
+The composite loss continues decreasing after the best canonical checkpoint
+while pointwise reconstruction worsens, so more identical training is not
+supported as the next diagnostic.
+
+The analysis report is
+[`run/decoder_overfit_seed42/analysis_20260801/RESULTS.md`](run/decoder_overfit_seed42/analysis_20260801/RESULTS.md).
+Oracle temporal/material conditioning and learned DINO remain unauthorized. A
+new canonical-only one-frame audit is needed to separate composite-loss conflict
+from decoder/conditioning capacity.
+
+### Diagnostic 1B: canonical-only single-frame overfit
+
+Diagnostic 1B preserves the selected training UID/frame, Gate-1E initialization,
+zero-DINO geometry pathway, trainable prefixes, optimizer, step budget and
+frozen thresholds from Diagnostic 1. Its only experimental change is the scalar
+used for backpropagation:
+
+```text
+Diagnostic 1:  canonical + 0.50 strain + 0.25 edge + 0.25 local velocity
+Diagnostic 1B: canonical only
+```
+
+The canonical term is the existing radius-normalized Smooth-L1/Huber loss with
+`beta=0.01`; it is not a new target or metric. Auxiliary terms are still
+computed and logged but do not contribute gradients. A pass still requires at
+least 95% canonical-NRMSE reduction and 90–110% recovered magnitude.
+
+From a csh/tcsh lab-server shell:
+
+```csh
+mkdir -p v42/runs/canonical_overfit_seed42
+setenv PYTHONPATH "v2/src:v3/src:v4/src"
+nohup .venv-v41/bin/python -u v42/run_canonical_overfit.py \
+  --device cuda \
+  --seed 42 \
+  --steps 2000 \
+  --lr 1e-3 \
+  --log-every 25 \
+  --gate1e-root v42/runs/gate1e_seed42_456 \
+  --runs v42/runs/canonical_overfit_seed42 \
+  >& v42/runs/canonical_overfit_seed42/console.log &
+echo $! > v42/runs/canonical_overfit_seed42/launcher.pid
+```
+
+Use singular `v42/run/gate1e_seed42_456` if appropriate. If 1B passes while
+Diagnostic 1 failed, basic output capacity is supported and composite-objective
+conflict becomes the leading explanation. If 1B also fails, the next audit must
+target spatial representation, decoder capacity or conditioning. Neither result
+directly authorizes temporal, material or learned-DINO experiments.
+
 ## Gate 2B: family-balanced deformation-signal diagnostic
 
 Gate 2B is an isolated follow-up to the failed Gate-2 screen. It does not

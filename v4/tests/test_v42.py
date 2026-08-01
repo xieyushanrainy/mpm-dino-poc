@@ -30,7 +30,9 @@ from mpm_dino_v4.v42_gate2 import (
     LOCAL_PREFIXES, gate2_screen, load_gate1e_source, local_parameters,
     protected_is_identical, protected_snapshot,
 )
-from mpm_dino_v4.v42_overfit import overfit_passed
+from mpm_dino_v4.v42_overfit import (
+    overfit_passed, select_overfit_objective,
+)
 
 
 def inputs(n=16, frames=7):
@@ -411,6 +413,15 @@ def test_decoder_overfit_gates_require_scale_and_timing_not_just_low_loss():
     assert overfit_passed("single_episode", episode)
     episode["peak_timing_error_frames"] = 2
     assert not overfit_passed("single_episode", episode)
+
+
+def test_canonical_overfit_objective_excludes_composite_auxiliary_terms():
+    class Losses:
+        total = torch.tensor(9.0)
+        canonical = torch.tensor(2.0)
+
+    assert select_overfit_objective(Losses, "composite") is Losses.total
+    assert select_overfit_objective(Losses, "canonical_only") is Losses.canonical
 
 
 def test_separated_losses_are_finite_and_backward():

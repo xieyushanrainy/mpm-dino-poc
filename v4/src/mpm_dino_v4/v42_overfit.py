@@ -21,6 +21,7 @@ from .v42_stages import total_mass_stage_weights
 
 
 OVERFIT_MODES = ("single_frame", "single_episode")
+OVERFIT_OBJECTIVES = ("composite", "canonical_only")
 LOSS_OPTIONS = {
     "soft_deformation_amplification_cap": 1.0,
     "soft_deformation_quantile": 0.95,
@@ -170,12 +171,25 @@ def overfit_passed(mode, metrics):
     )
 
 
+def select_overfit_objective(losses, objective):
+    if objective == "composite":
+        return losses.total
+    if objective == "canonical_only":
+        return losses.canonical
+    raise ValueError(f"unknown overfit objective: {objective}")
+
+
 def train_overfit_mode(
     dataset_root, manifest, gate1e_checkpoint, output, seed, mode,
     device="cuda", steps=2000, lr=1e-3, log_every=25,
+    objective="composite",
 ):
     if mode not in OVERFIT_MODES:
         raise ValueError(f"unknown overfit mode: {mode}")
+    if objective not in OVERFIT_OBJECTIVES:
+        raise ValueError(f"unknown overfit objective: {objective}")
+    if objective == "canonical_only" and mode != "single_frame":
+        raise ValueError("canonical-only audit is defined for single_frame only")
     seed_all(seed)
     device = torch.device(device)
     output = Path(output)
@@ -235,7 +249,8 @@ def train_overfit_mode(
                 prediction, loss_batch, targets=targets,
                 frame_weights=frame_weights, **LOSS_OPTIONS,
             )
-            losses.total.backward()
+            optimized_loss = select_overfit_objective(losses, objective)
+            optimized_loss.backward()
             gradient_norm = torch.nn.utils.clip_grad_norm_(parameters, 10.0)
             optimizer.step()
             should_measure = step == 1 or step % log_every == 0 or step == steps
@@ -249,6 +264,8 @@ def train_overfit_mode(
                 )
             record = {
                 "step": step,
+                "objective": objective,
+                "optimized_loss": float(optimized_loss.detach()),
                 "loss": float(losses.total.detach()),
                 "canonical_loss": float(losses.canonical.detach()),
                 "strain_loss": float(losses.strain.detach()),
@@ -265,7 +282,8 @@ def train_overfit_mode(
                     "metrics": metrics, "selection": selection,
                 }, output / "best.pt")
             print(
-                f"mode={mode} step={step:04d} loss={record['loss']:.6g} "
+                f"mode={mode} objective={objective} step={step:04d} "
+                f"optimized={record['optimized_loss']:.6g} "
                 f"canonical={metrics['canonical_nrmse']:.6g}",
                 flush=True,
             )
@@ -286,8 +304,13 @@ def train_overfit_mode(
         and torch.equal(final_output.rotation, source_output.rotation)
     )
     result = {
-        "experiment": "v42_decoder_learnability_overfit",
+        "experiment": (
+            "v42_decoder_canonical_only_overfit"
+            if objective == "canonical_only"
+            else "v42_decoder_learnability_overfit"
+        ),
         "mode": mode,
+        "objective": objective,
         "status": "complete",
         "passed": overfit_passed(mode, final_metrics),
         "thresholds": PASS_THRESHOLDS[mode],
