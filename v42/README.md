@@ -375,6 +375,41 @@ nohup .venv-v41/bin/python -u v42/run_event_normalized_temporal.py \
 echo $! > v42/runs/event_normalized_temporal_seed42_456/launcher.pid
 ```
 
+### Upstream-temporal spatial-adapter diagnostic
+
+This successor keeps the soft event-frame amplitude-normalized objective but
+moves temporal conditioning before `region_adapter`. A learned projection of
+the 15 condition channels is added to every point query at each frame, allowing
+stage/time to change which geometry-region information the adapter retrieves.
+The geometry control has the identical projection and parameter count but
+receives zeros. A small matched nonzero initialization of the final canonical
+layer ensures the condition projection receives gradients from the first update.
+
+The runner also fits a training-only per-stage affine deformation template. For
+each event stage it regresses radius-normalized canonical displacement on
+normalized canonical `(x, y, z, 1)` coordinates, then evaluates unseen
+validation UIDs. This provides a point-order-independent generic stage baseline;
+no validation or test targets are used to fit it.
+
+```csh
+mkdir -p v42/runs/upstream_temporal_seed42_456
+setenv PYTHONPATH "v2/src:v3/src:v4/src"
+nohup .venv-v41/bin/python -u v42/run_upstream_temporal.py \
+  --device cuda \
+  --seeds 42 456 \
+  --epochs 120 \
+  --draws 40 \
+  --patience 20 \
+  --plateau-patience 5 \
+  --gate1e-root v42/runs/gate1e_seed42_456 \
+  --runs v42/runs/upstream_temporal_seed42_456 \
+  >& v42/runs/upstream_temporal_seed42_456/console.log &
+echo $! > v42/runs/upstream_temporal_seed42_456/launcher.pid
+```
+
+The baseline is written to `STAGE_TEMPLATE_BASELINE.json`; the two learned arms
+retain their standard validation reports and protected-path integrity checks.
+
 ## Diagnostic 1: decoder single-example overfit
 
 The next diagnostic follows the frozen order established after Gate 2C. It asks

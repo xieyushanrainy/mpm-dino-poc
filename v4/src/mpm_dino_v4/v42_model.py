@@ -45,7 +45,7 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         gradient_checkpointing=True, rotation_parameterization="6d",
         rotation_attention=False, rotation_dynamics=False,
         contact_rotation_mode=None, angular_damping=0.95,
-        oracle_condition_dim=0,
+        oracle_condition_dim=0, oracle_injection="decoder",
     ):
         if local_mode not in {"zero", "geometry", "real_dino"}:
             raise ValueError(local_mode)
@@ -58,6 +58,9 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         self.oracle_condition_dim = int(oracle_condition_dim)
         if self.oracle_condition_dim < 0:
             raise ValueError("oracle_condition_dim must be non-negative")
+        if oracle_injection not in {"decoder", "adapter"}:
+            raise ValueError("oracle_injection must be decoder or adapter")
+        self.oracle_injection = oracle_injection
         self.local_trunk_alpha = float(local_trunk_alpha)
         if rotation_parameterization not in {"6d", "axis_angle"}:
             raise ValueError(rotation_parameterization)
@@ -126,12 +129,19 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
             nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, hidden_dim),
             nn.SiLU(), nn.Linear(hidden_dim, 3),
         )
-        if self.oracle_condition_dim:
+        if self.oracle_condition_dim and self.oracle_injection == "decoder":
             self.oracle_canonical_head = nn.Sequential(
                 nn.LayerNorm(hidden_dim + self.oracle_condition_dim),
                 nn.Linear(hidden_dim + self.oracle_condition_dim, hidden_dim),
                 nn.SiLU(), nn.Linear(hidden_dim, 3),
             )
+        if self.oracle_condition_dim and self.oracle_injection == "adapter":
+            self.oracle_adapter_projection = nn.Sequential(
+                nn.LayerNorm(self.oracle_condition_dim),
+                nn.Linear(self.oracle_condition_dim, hidden_dim), nn.SiLU(),
+                nn.Linear(hidden_dim, hidden_dim, bias=False),
+            )
+            nn.init.zeros_(self.oracle_adapter_projection[1].bias)
         nn.init.zeros_(self.v42_com_head[-1].weight)
         nn.init.zeros_(self.v42_com_head[-1].bias)
         nn.init.zeros_(self.rotation_head[-1].weight)
@@ -150,7 +160,7 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
             nn.init.zeros_(self.rotation_contact_score[-1].bias)
         nn.init.zeros_(self.canonical_head[-1].weight)
         nn.init.zeros_(self.canonical_head[-1].bias)
-        if self.oracle_condition_dim:
+        if self.oracle_condition_dim and self.oracle_injection == "decoder":
             nn.init.zeros_(self.oracle_canonical_head[-1].weight)
             nn.init.zeros_(self.oracle_canonical_head[-1].bias)
 
@@ -325,6 +335,23 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
             + self.local_trunk_alpha
             * (physical_hidden - physical_hidden.detach())
         )
+        if self.oracle_condition_dim and self.oracle_injection == "adapter":
+            if oracle_condition is None:
+                oracle_condition = protected.new_zeros(
+                    protected.shape[0], self.frames,
+                    self.oracle_condition_dim,
+                )
+            expected = (
+                protected.shape[0], self.frames, self.oracle_condition_dim,
+            )
+            if tuple(oracle_condition.shape) != expected:
+                raise ValueError(
+                    "oracle_condition must have shape "
+                    f"{expected}, got {tuple(oracle_condition.shape)}"
+                )
+            protected = protected + self.oracle_adapter_projection(
+                oracle_condition
+            )[:, :, None]
         dino = inputs["dino"]
         if self.local_mode in {"zero", "geometry"}:
             dino = torch.zeros_like(dino)
@@ -337,7 +364,7 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         if self.local_mode == "zero":
             displacement = torch.zeros_like(legacy.residual_local)
         else:
-            if self.oracle_condition_dim:
+            if self.oracle_condition_dim and self.oracle_injection == "decoder":
                 if oracle_condition is None:
                     oracle_condition = local_hidden.new_zeros(
                         local_hidden.shape[0], self.frames,

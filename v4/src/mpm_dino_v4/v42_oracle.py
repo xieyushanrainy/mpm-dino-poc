@@ -7,8 +7,12 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch.nn import functional as F
+from torch.utils.data import DataLoader
 
-from .v42_gate2 import train_v42_gate2
+from .model import masked_mean
+from .v41_data import V41TrajectoryDataset
+from .v41_train import move
+from .v42_gate2 import _batch_targets_and_stages, train_v42_gate2
 from .v42_stages import ImpactStage
 
 
@@ -167,6 +171,165 @@ def train_event_normalized_variant(
         model_contract_version="event_normalized_temporal_control_v1",
         **kwargs,
     )
+
+
+def train_upstream_temporal_variant(
+    dataset_root, manifest, checkpoint, output, seed, variant, **kwargs,
+):
+    if variant not in {"geometry_control", "oracle_temporal"}:
+        raise ValueError("upstream diagnostic supports geometry and temporal only")
+    builder = OracleConditionBuilder(
+        dataset_root, variant == "oracle_temporal", False,
+    )
+    return train_v42_gate2(
+        dataset_root, manifest, checkpoint, output, seed,
+        loss_options=LOSS_CONTRACT, stage_weight_mode="total_mass",
+        oracle_condition_dim=ORACLE_DIM, oracle_injection="adapter",
+        condition_builder=builder, condition_name=variant,
+        exploratory_control=True,
+        objective_builder=event_normalized_canonical_mse,
+        objective_name="event_frame_amplitude_normalized_canonical_mse_v1",
+        dataset_families=("soft_body",), selection_mode="optimized",
+        experiment_name="v42_upstream_temporal_" + variant,
+        model_contract_version="upstream_temporal_adapter_control_v1",
+        **kwargs,
+    )
+
+
+def _event_mask(batch, targets, stages, stage=None):
+    labels = stages.labels[:, 1:]
+    if stage is None:
+        selected = torch.zeros_like(labels, dtype=torch.bool)
+        for value in EVENT_STAGES:
+            selected |= labels.eq(int(value))
+    else:
+        selected = labels.eq(int(stage))
+    return (
+        batch["target_mask"]
+        & targets.valid_rotation[:, :, None]
+        & selected[:, :, None]
+    )
+
+
+@torch.no_grad()
+def stage_affine_template_baseline(
+    dataset_root, manifest, device="cpu", ridge=1e-4,
+):
+    """Fit training-only stage affine fields and evaluate validation UIDs."""
+    device = torch.device(device)
+    train = V41TrajectoryDataset(
+        dataset_root, manifest, "train", "zero", 42,
+        families=("soft_body",),
+    )
+    validation = V41TrajectoryDataset(
+        dataset_root, manifest, "validation", "zero", 42,
+        families=("soft_body",),
+    )
+    normal = {
+        int(stage): [torch.zeros(4, 4, device=device),
+                     torch.zeros(4, 3, device=device)]
+        for stage in EVENT_STAGES
+    }
+    for raw in DataLoader(train, batch_size=1, shuffle=False):
+        batch = move(raw, device)
+        targets, stages = _batch_targets_and_stages(batch)
+        coordinates = targets.reference_shape / targets.radius[:, None, None]
+        design = torch.cat((coordinates, torch.ones_like(coordinates[..., :1])), -1)
+        normalized_target = targets.displacement / targets.radius[:, None, None, None]
+        for stage in EVENT_STAGES:
+            valid = _event_mask(batch, targets, stages, stage)[0]
+            frames, points = torch.where(valid)
+            if not len(frames):
+                continue
+            x = design[0, points]
+            y = normalized_target[0, frames, points]
+            normal[int(stage)][0].add_(x.T @ x)
+            normal[int(stage)][1].add_(x.T @ y)
+    coefficients = {}
+    identity = torch.eye(4, device=device)
+    identity[-1, -1] = 0  # do not regularize the intercept
+    for stage, (xtx, xty) in normal.items():
+        coefficients[stage] = torch.linalg.solve(xtx + ridge * identity, xty)
+
+    rows = []
+    for raw in DataLoader(validation, batch_size=1, shuffle=False):
+        batch = move(raw, device)
+        targets, stages = _batch_targets_and_stages(batch)
+        coordinates = targets.reference_shape / targets.radius[:, None, None]
+        design = torch.cat((coordinates, torch.ones_like(coordinates[..., :1])), -1)
+        predicted = torch.zeros_like(targets.displacement)
+        for stage in EVENT_STAGES:
+            selected = stages.labels[:, 1:].eq(int(stage))
+            field = design @ coefficients[int(stage)]
+            predicted = torch.where(
+                selected[:, :, None, None],
+                field[:, None] * targets.radius[:, None, None, None],
+                predicted,
+            )
+        predicted = (
+            predicted - masked_mean(
+                predicted,
+                batch["target_mask"], dim=2,
+            )[:, :, None]
+        ) * batch["target_mask"][..., None]
+        valid = _event_mask(batch, targets, stages)
+        target = targets.displacement
+        pred_flat = predicted[valid]
+        target_flat = target[valid]
+        target_energy = target_flat.square().sum() / valid.sum().clamp_min(1)
+        error_energy = (
+            (pred_flat - target_flat).square().sum()
+            / valid.sum().clamp_min(1)
+        )
+        cosine = F.cosine_similarity(pred_flat, target_flat, dim=-1)
+        rows.append({
+            "uid": batch["uid"][0],
+            "episode_id": batch["episode_id"][0],
+            "event_normalized_mse": float((error_energy / target_energy).cpu()),
+            "event_spatial_cosine": float(cosine.mean().cpu()),
+            "event_predicted_to_target_rms": float(
+                torch.sqrt(pred_flat.square().mean() / target_flat.square().mean()).cpu()
+            ),
+            "stage_metrics": {
+                stage.name.lower(): _template_stage_metrics(
+                    predicted, target, _event_mask(batch, targets, stages, stage),
+                ) for stage in EVENT_STAGES
+            },
+        })
+    return {
+        "baseline": "training_fitted_per_stage_affine_canonical_field",
+        "fit_split": "train",
+        "evaluation_split": "validation",
+        "test_used": False,
+        "ridge": ridge,
+        "features": ["normalized_x", "normalized_y", "normalized_z", "intercept"],
+        "stages": [stage.name.lower() for stage in EVENT_STAGES],
+        "validation_uids": len(rows),
+        "summary": {
+            key: float(np.mean([row[key] for row in rows]))
+            for key in (
+                "event_normalized_mse", "event_spatial_cosine",
+                "event_predicted_to_target_rms",
+            )
+        },
+        "rows": rows,
+    }
+
+
+def _template_stage_metrics(predicted, target, valid):
+    if not valid.any():
+        return None
+    pred = predicted[valid]
+    truth = target[valid]
+    target_energy = truth.square().sum() / valid.sum().clamp_min(1)
+    error_energy = (pred - truth).square().sum() / valid.sum().clamp_min(1)
+    return {
+        "normalized_mse": float((error_energy / target_energy).cpu()),
+        "spatial_cosine": float(F.cosine_similarity(pred, truth, dim=-1).mean().cpu()),
+        "predicted_to_target_rms": float(
+            torch.sqrt(pred.square().mean() / truth.square().mean()).cpu()
+        ),
+    }
 
 
 EFFECT_METRICS = (

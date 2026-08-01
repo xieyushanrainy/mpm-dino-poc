@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from torch import nn
 from torch.utils.data import DataLoader
 
 from mpm_dino_v2.deformation import edge_validity, gather_neighbours
@@ -27,6 +28,7 @@ from .v42_stages import (
 LOCAL_PREFIXES = (
     "dino_projection.", "region_encoder.", "region_adapter.",
     "canonical_head.", "oracle_canonical_head.",
+    "oracle_adapter_projection.",
 )
 HORIZONS = (1, 8, 16, 30, 40, 59)
 TIMING_FLOOR_NRMSE = 1e-4
@@ -66,10 +68,15 @@ def set_gate2_mode(model, training):
         model.region_encoder.train()
         model.region_adapter.train()
         model.canonical_head.train()
+        if hasattr(model, "oracle_canonical_head"):
+            model.oracle_canonical_head.train()
+        if hasattr(model, "oracle_adapter_projection"):
+            model.oracle_adapter_projection.train()
 
 
 def load_gate1e_source(
     checkpoint, local_mode="geometry", device="cpu", oracle_condition_dim=0,
+    oracle_injection="decoder",
 ):
     """Strictly load the reviewed Gate-1E model and protect its global path."""
     checkpoint = Path(checkpoint)
@@ -97,17 +104,26 @@ def load_gate1e_source(
         local_trunk_alpha=0.0, rotation_parameterization="axis_angle",
         rotation_attention=True, rotation_dynamics=True,
         oracle_condition_dim=oracle_condition_dim,
+        oracle_injection=oracle_injection,
     ).to(device)
     if oracle_condition_dim:
         incompatible = model.load_state_dict(source, strict=False)
         expected_missing = {
             name for name in model.state_dict()
-            if name.startswith("oracle_canonical_head.")
+            if name.startswith((
+                "oracle_canonical_head.", "oracle_adapter_projection.",
+            ))
         }
         if set(incompatible.missing_keys) != expected_missing or (
             incompatible.unexpected_keys
         ):
             raise RuntimeError("unexpected Gate-1E/oracle state mismatch")
+        if oracle_injection == "adapter":
+            # Gate-1E stores a zero local output layer. A small matched
+            # nonzero initialization is required so condition-projection and
+            # adapter gradients exist on the first optimization step.
+            nn.init.normal_(model.canonical_head[-1].weight, std=1e-3)
+            nn.init.zeros_(model.canonical_head[-1].bias)
     else:
         model.load_state_dict(source, strict=True)
     for parameter in model.parameters():
@@ -554,6 +570,7 @@ def train_v42_gate2(
     condition_name=None, exploratory_control=False,
     objective_builder=None, objective_name=None,
     dataset_families=("soft_body", "rigid"), selection_mode="legacy",
+    oracle_injection="decoder",
 ):
     seed_all(seed)
     device = torch.device(device)
@@ -576,6 +593,7 @@ def train_v42_gate2(
     )
     model, source_state = load_gate1e_source(
         gate1e_checkpoint, "geometry", device, oracle_condition_dim,
+        oracle_injection,
     )
     zero_model, _ = load_gate1e_source(
         gate1e_checkpoint, "zero", device,
@@ -670,6 +688,7 @@ def train_v42_gate2(
         },
         "validation_global_bit_identity_checked_episodes": checked_before,
         "oracle_condition_dim": oracle_condition_dim,
+        "oracle_injection": oracle_injection,
         "condition_name": condition_name,
         "analysis_mode": (
             "exploratory_controlled_group_not_a_gate"

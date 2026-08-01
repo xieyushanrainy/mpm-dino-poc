@@ -135,6 +135,27 @@ def test_event_normalized_objective_makes_zero_prediction_unit_loss():
     )
 
 
+def test_upstream_temporal_condition_changes_adapter_queries_and_gets_gradient():
+    data = inputs(frames=7)
+    model = V42RotationAwareSurrogate(
+        hidden_dim=16, blocks=1, heads=4, dropout=0.0, frames=7,
+        gradient_checkpointing=False, oracle_condition_dim=ORACLE_DIM,
+        oracle_injection="adapter",
+    )
+    torch.nn.init.normal_(model.canonical_head[-1].weight, std=1e-3)
+    zero_condition = torch.zeros(1, 7, ORACLE_DIM)
+    temporal_condition = torch.randn(1, 7, ORACLE_DIM)
+    control = model(**data, oracle_condition=zero_condition)
+    treatment = model(**data, oracle_condition=temporal_condition)
+    assert not torch.equal(
+        control.canonical_displacement, treatment.canonical_displacement,
+    )
+    treatment.canonical_displacement.square().sum().backward()
+    gradient = model.oracle_adapter_projection[1].weight.grad
+    assert gradient is not None
+    assert torch.linalg.vector_norm(gradient) > 0
+
+
 def test_rotation_6d_identity_is_proper():
     matrix = rotation_6d_to_matrix(identity_rotation_6d(2))
     assert torch.allclose(matrix, torch.eye(3).expand(2, -1, -1))
