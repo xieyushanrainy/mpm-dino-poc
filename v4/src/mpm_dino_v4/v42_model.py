@@ -45,6 +45,7 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         gradient_checkpointing=True, rotation_parameterization="6d",
         rotation_attention=False, rotation_dynamics=False,
         contact_rotation_mode=None, angular_damping=0.95,
+        oracle_condition_dim=0,
     ):
         if local_mode not in {"zero", "geometry", "real_dino"}:
             raise ValueError(local_mode)
@@ -54,6 +55,9 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
             gradient_checkpointing=gradient_checkpointing,
         )
         self.local_mode = local_mode
+        self.oracle_condition_dim = int(oracle_condition_dim)
+        if self.oracle_condition_dim < 0:
+            raise ValueError("oracle_condition_dim must be non-negative")
         self.local_trunk_alpha = float(local_trunk_alpha)
         if rotation_parameterization not in {"6d", "axis_angle"}:
             raise ValueError(rotation_parameterization)
@@ -122,6 +126,12 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
             nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, hidden_dim),
             nn.SiLU(), nn.Linear(hidden_dim, 3),
         )
+        if self.oracle_condition_dim:
+            self.oracle_canonical_head = nn.Sequential(
+                nn.LayerNorm(hidden_dim + self.oracle_condition_dim),
+                nn.Linear(hidden_dim + self.oracle_condition_dim, hidden_dim),
+                nn.SiLU(), nn.Linear(hidden_dim, 3),
+            )
         nn.init.zeros_(self.v42_com_head[-1].weight)
         nn.init.zeros_(self.v42_com_head[-1].bias)
         nn.init.zeros_(self.rotation_head[-1].weight)
@@ -140,6 +150,9 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
             nn.init.zeros_(self.rotation_contact_score[-1].bias)
         nn.init.zeros_(self.canonical_head[-1].weight)
         nn.init.zeros_(self.canonical_head[-1].bias)
+        if self.oracle_condition_dim:
+            nn.init.zeros_(self.oracle_canonical_head[-1].weight)
+            nn.init.zeros_(self.oracle_canonical_head[-1].bias)
 
     def _physical_features(self, **inputs):
         captured = {}
@@ -155,6 +168,7 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         return legacy, captured["hidden"]
 
     def forward(self, **inputs):
+        oracle_condition = inputs.pop("oracle_condition", None)
         legacy, physical_hidden = self._physical_features(**inputs)
         input_mask = inputs["input_mask"]
         reference = inputs["x1"]
@@ -323,7 +337,31 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         if self.local_mode == "zero":
             displacement = torch.zeros_like(legacy.residual_local)
         else:
-            raw = self.canonical_head(local_hidden) * input_mask[:, None, :, None]
+            if self.oracle_condition_dim:
+                if oracle_condition is None:
+                    oracle_condition = local_hidden.new_zeros(
+                        local_hidden.shape[0], self.frames,
+                        self.oracle_condition_dim,
+                    )
+                expected = (
+                    local_hidden.shape[0], self.frames,
+                    self.oracle_condition_dim,
+                )
+                if tuple(oracle_condition.shape) != expected:
+                    raise ValueError(
+                        "oracle_condition must have shape "
+                        f"{expected}, got {tuple(oracle_condition.shape)}"
+                    )
+                conditioned = torch.cat((
+                    local_hidden,
+                    oracle_condition[:, :, None].expand(
+                        -1, -1, local_hidden.shape[2], -1,
+                    ),
+                ), dim=-1)
+                raw = self.oracle_canonical_head(conditioned)
+            else:
+                raw = self.canonical_head(local_hidden)
+            raw = raw * input_mask[:, None, :, None]
             displacement = (
                 raw - masked_mean(
                     raw, input_mask[:, None].expand(-1, self.frames, -1), 2

@@ -26,7 +26,7 @@ from .v42_stages import (
 
 LOCAL_PREFIXES = (
     "dino_projection.", "region_encoder.", "region_adapter.",
-    "canonical_head.",
+    "canonical_head.", "oracle_canonical_head.",
 )
 HORIZONS = (1, 8, 16, 30, 40, 59)
 TIMING_FLOOR_NRMSE = 1e-4
@@ -68,7 +68,9 @@ def set_gate2_mode(model, training):
         model.canonical_head.train()
 
 
-def load_gate1e_source(checkpoint, local_mode="geometry", device="cpu"):
+def load_gate1e_source(
+    checkpoint, local_mode="geometry", device="cpu", oracle_condition_dim=0,
+):
     """Strictly load the reviewed Gate-1E model and protect its global path."""
     checkpoint = Path(checkpoint)
     state = torch.load(checkpoint, map_location="cpu", weights_only=False)
@@ -94,8 +96,20 @@ def load_gate1e_source(checkpoint, local_mode="geometry", device="cpu"):
         heads=heads, dropout=dropout, frames=59,
         local_trunk_alpha=0.0, rotation_parameterization="axis_angle",
         rotation_attention=True, rotation_dynamics=True,
+        oracle_condition_dim=oracle_condition_dim,
     ).to(device)
-    model.load_state_dict(source, strict=True)
+    if oracle_condition_dim:
+        incompatible = model.load_state_dict(source, strict=False)
+        expected_missing = {
+            name for name in model.state_dict()
+            if name.startswith("oracle_canonical_head.")
+        }
+        if set(incompatible.missing_keys) != expected_missing or (
+            incompatible.unexpected_keys
+        ):
+            raise RuntimeError("unexpected Gate-1E/oracle state mismatch")
+    else:
+        model.load_state_dict(source, strict=True)
     for parameter in model.parameters():
         parameter.requires_grad_(False)
     if local_mode == "geometry":
@@ -148,6 +162,7 @@ def _batch_targets_and_stages(batch):
 def run_gate2_epoch(
     model, loader, device, optimizer=None, accumulation=4, max_batches=None,
     loss_options=None, stage_weight_mode="per_frame",
+    condition_builder=None,
 ):
     if stage_weight_mode not in {"per_frame", "total_mass"}:
         raise ValueError(f"unknown stage weight mode: {stage_weight_mode}")
@@ -167,9 +182,10 @@ def run_gate2_epoch(
                 if stage_weight_mode == "total_mass"
                 else stages.weights[:, 1:]
             ).detach()
-            output = model(**{
-                key: batch[key] for key in MODEL_INPUT_KEYS
-            })
+            inputs = {key: batch[key] for key in MODEL_INPUT_KEYS}
+            if condition_builder is not None:
+                inputs["oracle_condition"] = condition_builder(batch, stages)
+            output = model(**inputs)
             losses = compute_v42_local_losses(
                 output, batch, targets=targets,
                 frame_weights=frame_weights,
@@ -218,15 +234,16 @@ def _first_at_or_above(values, threshold, start):
 
 
 @torch.no_grad()
-def gate2_rows(model, loader, device, condition):
+def gate2_rows(model, loader, device, condition, condition_builder=None):
     model.eval()
     rows = []
     for raw in loader:
         batch = move(raw, device)
         targets, stages = _batch_targets_and_stages(batch)
-        output = model(**{
-            key: batch[key] for key in MODEL_INPUT_KEYS
-        })
+        inputs = {key: batch[key] for key in MODEL_INPUT_KEYS}
+        if condition_builder is not None:
+            inputs["oracle_condition"] = condition_builder(batch, stages)
+        output = model(**inputs)
         mask = batch["target_mask"]
         radius = targets.radius
         predicted_magnitude = torch.sqrt(
@@ -405,6 +422,11 @@ def summarize_gate2(rows):
             timing_onset, timing_peak = [], []
             by_uid = defaultdict(list)
             for row in selected:
+                target_peak = max(row["target_magnitude"])
+                row["predicted_to_target_peak_ratio"] = (
+                    max(row["predicted_magnitude"]) / target_peak
+                    if target_peak > 0 else None
+                )
                 by_uid[row["uid"]].append(row)
                 timing = row["timing"]
                 if timing and timing["identifiable"]:
@@ -422,6 +444,11 @@ def summarize_gate2(rows):
                     correlations.append(float(np.corrcoef(target, predicted)[0, 1]))
             item["uid_balanced_magnitude_correlation"] = (
                 float(np.mean(correlations)) if correlations else None
+            )
+            item["uid_balanced_predicted_to_target_peak_ratio"] = (
+                _uid_balanced_mean(
+                    selected, "predicted_to_target_peak_ratio",
+                )
             )
             item["identifiable_timing_episodes"] = len(timing_peak)
             item["median_onset_error_frames"] = (
@@ -513,6 +540,8 @@ def train_v42_gate2(
     patience=20, plateau_patience=5, resume=True, max_batches=None,
     loss_options=None, experiment_name=None, model_contract_version=None,
     stage_weight_mode="per_frame",
+    oracle_condition_dim=0, condition_builder=None,
+    condition_name=None, exploratory_control=False,
 ):
     seed_all(seed)
     device = torch.device(device)
@@ -534,7 +563,7 @@ def train_v42_gate2(
         validation_ds, batch_size=1, shuffle=False, num_workers=0,
     )
     model, source_state = load_gate1e_source(
-        gate1e_checkpoint, "geometry", device,
+        gate1e_checkpoint, "geometry", device, oracle_condition_dim,
     )
     zero_model, _ = load_gate1e_source(
         gate1e_checkpoint, "zero", device,
@@ -628,6 +657,12 @@ def train_v42_gate2(
             "test_used": False,
         },
         "validation_global_bit_identity_checked_episodes": checked_before,
+        "oracle_condition_dim": oracle_condition_dim,
+        "condition_name": condition_name,
+        "analysis_mode": (
+            "exploratory_controlled_group_not_a_gate"
+            if exploratory_control else "gate"
+        ),
     }
     if gate2b:
         config["gate2b_loss_design"] = {
@@ -688,17 +723,21 @@ def train_v42_gate2(
                 accumulation, max_batches,
                 loss_options,
                 stage_weight_mode,
+                condition_builder,
             )
             validation = run_gate2_epoch(
                 model, validation_loader, device, None,
                 accumulation, max_batches,
                 loss_options,
                 stage_weight_mode,
+                condition_builder,
             )
             rows = gate2_rows(
                 model, validation_loader, device,
-                "geometry_only_gate2c" if gate2c
-                else "geometry_only_gate2b" if gate2b else "geometry_only",
+                condition_name or (
+                    "geometry_only_gate2c" if gate2c
+                    else "geometry_only_gate2b" if gate2b else "geometry_only"
+                ), condition_builder,
             )
             summary = summarize_gate2(rows)
             soft = summary["panel_Z/soft_body"]
@@ -742,8 +781,10 @@ def train_v42_gate2(
     model.load_state_dict(best_state["model"])
     learned_rows = gate2_rows(
         model, validation_loader, device,
-        "geometry_only_gate2c" if gate2c
-        else "geometry_only_gate2b" if gate2b else "geometry_only",
+        condition_name or (
+            "geometry_only_gate2c" if gate2c
+            else "geometry_only_gate2b" if gate2b else "geometry_only"
+        ), condition_builder,
     )
     learned_summary = summarize_gate2(learned_rows)
     checked_after = verify_global_bit_identity(
@@ -753,6 +794,10 @@ def train_v42_gate2(
         "split": "validation", "panel_reporting_separate": True,
         "zero_local": zero_summary, "geometry_only": learned_summary,
         "screen": gate2_screen(learned_summary, zero_summary),
+        "screen_interpretation": (
+            "descriptive_legacy_metrics_only_not_a_gate"
+            if exploratory_control else "frozen_gate_decision"
+        ),
         "geometry_rows": learned_rows,
     }
     report_path = output / "VALIDATION_SCREEN.json"
@@ -772,7 +817,9 @@ def train_v42_gate2(
         "validation_com_rotation_bit_identical_to_gate1e": True,
         "validation_global_identity_checked_episodes_before": checked_before,
         "validation_global_identity_checked_episodes_after": checked_after,
-        "gate2_screen_passed_this_seed": report["screen"]["passed"],
+        "gate2_screen_passed_this_seed": (
+            None if exploratory_control else report["screen"]["passed"]
+        ),
     }
     (output / "RUN_COMPLETE.json").write_text(
         json.dumps(completion, indent=2) + "\n"

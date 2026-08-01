@@ -291,6 +291,57 @@ The full validation-only report is
 [`run/gate2_seed42_456/analysis_20260731/RESULTS.md`](run/gate2_seed42_456/analysis_20260731/RESULTS.md).
 Gate 3 / real-DINO training remains unauthorized.
 
+## Oracle temporal/material controlled-group diagnostic
+
+The single-frame overfit experiment is set aside. This experiment is explicitly
+not a gate: it is a matched 2x2 controlled comparison intended to localize the
+remaining failure at a high level.
+
+| Variant | Ground-truth event stage/time | Simulator-source material |
+|---|---:|---:|
+| `geometry_control` | no | no |
+| `oracle_temporal` | yes | no |
+| `oracle_material` | no | yes |
+| `oracle_both` | yes | yes |
+
+Every arm uses the same 15-channel conditioning-capable decoder, initialization,
+Gate-1E source, balanced sampling, composite loss, total-mass stage weighting,
+checkpoint selection and validation split. Disabled inputs are zeros. Temporal
+conditioning contains the seven ground-truth stage indicators plus normalized
+time relative to ground-truth contact. Material conditioning contains family and
+fixed-scale simulator-source density, friction, Young's modulus and damping
+features. These are deliberately non-deployable oracle inputs; they diagnose
+missing information rather than propose the final model.
+
+Interpret the main effects descriptively: temporal improvement implicates event
+state/timing ambiguity; material improvement implicates material ambiguity; an
+improvement only in `oracle_both` suggests interaction; no meaningful improvement
+shifts attention to representation, decoder optimization, target quality or
+deformation signal-to-noise. The runner writes `CONTROLLED_EFFECTS.json` with
+per-seed cell means, temporal/material main effects and interaction. It writes no
+pass/fail decision and uses no test data, real DINO, or Gate 3.
+
+From csh/tcsh on the lab server:
+
+```csh
+mkdir -p v42/runs/oracle_controls_seed42_456
+setenv PYTHONPATH "v2/src:v3/src:v4/src"
+nohup .venv-v41/bin/python -u v42/run_oracle_controls.py \
+  --device cuda \
+  --seeds 42 456 \
+  --epochs 120 \
+  --draws 40 \
+  --patience 20 \
+  --plateau-patience 5 \
+  --gate1e-root v42/runs/gate1e_seed42_456 \
+  --runs v42/runs/oracle_controls_seed42_456 \
+  >& v42/runs/oracle_controls_seed42_456/console.log &
+echo $! > v42/runs/oracle_controls_seed42_456/launcher.pid
+```
+
+Use singular `v42/run/gate1e_seed42_456` if that is where the downloaded
+Gate-1E checkpoints live.
+
 ## Diagnostic 1: decoder single-example overfit
 
 The next diagnostic follows the frozen order established after Gate 2C. It asks
@@ -331,9 +382,9 @@ echo $! > v42/runs/decoder_overfit_seed42/launcher.pid
 ```
 
 Use singular `v42/run/gate1e_seed42_456` when that is the lab-server source
-location. `DIAGNOSTIC_SUMMARY.json` authorizes oracle temporal conditioning only
-when both fits pass. Oracle material conditioning and learned DINO remain
-unauthorized until their preceding diagnostics are successful.
+location. This was the original gated diagnostic order; it has now been
+superseded by the exploratory controlled-group experiment above. Learned DINO
+remains outside this experiment.
 
 ### Decoder-overfit result
 
@@ -348,9 +399,9 @@ supported as the next diagnostic.
 
 The analysis report is
 [`run/decoder_overfit_seed42/analysis_20260801/RESULTS.md`](run/decoder_overfit_seed42/analysis_20260801/RESULTS.md).
-Oracle temporal/material conditioning and learned DINO remain unauthorized. A
-new canonical-only one-frame audit is needed to separate composite-loss conflict
-from decoder/conditioning capacity.
+At that point the original gated plan called for a canonical-only one-frame
+audit. That path is now set aside in favour of the non-gated oracle controlled
+comparison above; learned DINO remains unauthorized.
 
 ### Diagnostic 1B: canonical-only single-frame overfit
 
@@ -444,6 +495,21 @@ echo $! > v42/runs/mse_overfit_seed42/launcher.pid
 Use singular `v42/run/gate1e_seed42_456` if appropriate. This experiment does
 not load validation/test data or train DINO, and it does not automatically
 authorize later stages.
+
+#### Diagnostic-1C result
+
+The downloaded MSE run is complete and integrity-valid but does not improve the
+fit. Best canonical NRMSE is `0.123721`, versus `0.109833` for composite Huber
+and `0.106817` for canonical-only Huber. Error reduction falls to `66.82%` and
+relative residual rises to `33.18%`, although approximate magnitude and broad
+direction remain learned. The MSE run also shows a transient optimization spike
+near step 1850 before recovering.
+
+The analysis report is
+[`run/mse_overfit_seed42/analysis_20260801/RESULTS.md`](run/mse_overfit_seed42/analysis_20260801/RESULTS.md).
+Across the three matched objectives, loss formulation no longer appears to be
+the primary spatial bottleneck; pointwise conditioning and decoder
+representation are the next diagnostic focus.
 
 ## Gate 2B: family-balanced deformation-signal diagnostic
 

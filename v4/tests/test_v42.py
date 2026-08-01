@@ -33,6 +33,9 @@ from mpm_dino_v4.v42_gate2 import (
 from mpm_dino_v4.v42_overfit import (
     normalized_canonical_mse, overfit_passed, select_overfit_objective,
 )
+from mpm_dino_v4.v42_oracle import (
+    MATERIAL_DIM, ORACLE_DIM, TEMPORAL_DIM, material_vector,
+)
 
 
 def inputs(n=16, frames=7):
@@ -69,6 +72,39 @@ def rigid_trajectory(x1, frames):
             + shape @ rotation
         )
     return torch.stack(outputs, 1)
+
+
+def test_oracle_material_vector_has_fixed_contract():
+    metadata = {
+        "index_record": {"solver_route": "soft_body"},
+        "simulation": {"body_parameters": [{
+            "density_kg_m3": 1000.0, "friction": 0.5,
+            "youngs_modulus_pa": 100000.0, "damping": 0.25,
+        }]},
+    }
+    vector = material_vector(metadata)
+    assert vector.shape == (MATERIAL_DIM,)
+    assert torch.allclose(vector, torch.tensor([
+        0., 1., 1 / 3, 0.5, 0., 0.5, 1.,
+    ]))
+
+
+def test_oracle_decoder_matches_zero_initialization_and_receives_gradient():
+    data = inputs(frames=7)
+    model = V42RotationAwareSurrogate(
+        hidden_dim=16, blocks=1, heads=4, dropout=0.0, frames=7,
+        gradient_checkpointing=False, oracle_condition_dim=ORACLE_DIM,
+    )
+    condition = torch.randn(1, 7, ORACLE_DIM)
+    zero = model(**data)
+    conditioned = model(**data, oracle_condition=condition)
+    assert zero.canonical_displacement.shape == (1, 7, 16, 3)
+    assert torch.equal(
+        zero.canonical_displacement, conditioned.canonical_displacement,
+    )
+    conditioned.canonical_displacement.square().sum().backward()
+    assert model.oracle_canonical_head[-1].weight.grad is not None
+    assert TEMPORAL_DIM + MATERIAL_DIM == ORACLE_DIM
 
 
 def test_rotation_6d_identity_is_proper():

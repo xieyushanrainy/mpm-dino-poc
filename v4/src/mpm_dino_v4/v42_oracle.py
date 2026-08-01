@@ -1,0 +1,188 @@
+from __future__ import annotations
+
+import json
+import math
+from pathlib import Path
+
+import numpy as np
+import torch
+from torch.nn import functional as F
+
+from .v42_gate2 import train_v42_gate2
+
+
+TEMPORAL_DIM = 8  # seven stage indicators plus event-relative time
+MATERIAL_DIM = 7
+ORACLE_DIM = TEMPORAL_DIM + MATERIAL_DIM
+ORACLE_VARIANTS = {
+    "geometry_control": (False, False),
+    "oracle_temporal": (True, False),
+    "oracle_material": (False, True),
+    "oracle_both": (True, True),
+}
+LOSS_CONTRACT = {
+    "soft_deformation_amplification_cap": 1.0,
+    "soft_deformation_quantile": 0.95,
+    "soft_deformation_floor_fraction": 0.005,
+    "family_balanced": True,
+    "rigid_family_weight": 0.25,
+    "rigid_zero_weight": 0.0,
+}
+
+
+def material_vector(metadata):
+    """Fixed-scale simulator-source material descriptor (no fitted stats)."""
+    soft = metadata["index_record"]["solver_route"] == "soft_body"
+    bodies = metadata.get("simulation", {}).get("body_parameters", [])
+    values = bodies[0] if len(bodies) == 1 else {}
+    density = float(values.get("density_kg_m3", 0.0))
+    young = float(values.get("youngs_modulus_pa", 0.0))
+    damping = float(values.get("damping", 0.0))
+    return torch.tensor([
+        float(not soft), float(soft),
+        (math.log10(density) - 2.5) / 1.5 if density > 0 else 0.0,
+        float(values.get("friction", 0.0)),
+        (math.log10(young) - 5.0) / 3.0 if young > 0 else 0.0,
+        damping / 0.5,
+        float(young > 0 or damping > 0),
+    ], dtype=torch.float32)
+
+
+def load_material_table(dataset_root):
+    table = {}
+    for path in Path(dataset_root).glob("objects/*/source_metadata.json"):
+        metadata = json.loads(path.read_text())
+        table[metadata["index_record"]["uid"]] = material_vector(metadata)
+    if not table:
+        raise FileNotFoundError("no object source_metadata.json files found")
+    return table
+
+
+def temporal_features(stages, target_frames=59):
+    labels = stages.labels[:, 1:1 + target_frames]
+    one_hot = F.one_hot(labels, num_classes=7).to(stages.deformation.dtype)
+    saved_frames = torch.arange(
+        1, target_frames + 1, device=labels.device,
+        dtype=stages.deformation.dtype,
+    )[None]
+    onset = stages.contact_onset[:, None]
+    relative = (saved_frames - onset.to(saved_frames.dtype)) / max(
+        target_frames - 1, 1,
+    )
+    relative = relative.clamp(-1, 1)
+    relative = torch.where(onset >= 0, relative, torch.zeros_like(relative))
+    return torch.cat((one_hot, relative[..., None]), dim=-1)
+
+
+class OracleConditionBuilder:
+    def __init__(self, dataset_root, temporal, material):
+        self.temporal = bool(temporal)
+        self.material = bool(material)
+        self.materials = load_material_table(dataset_root)
+
+    def __call__(self, batch, stages):
+        batch_size, frames = stages.labels.shape[0], stages.labels.shape[1] - 1
+        result = stages.deformation.new_zeros(batch_size, frames, ORACLE_DIM)
+        if self.temporal:
+            result[..., :TEMPORAL_DIM] = temporal_features(stages, frames)
+        if self.material:
+            values = torch.stack([self.materials[uid] for uid in batch["uid"]])
+            result[..., TEMPORAL_DIM:] = values.to(result)[:, None]
+        return result.detach()
+
+
+def train_oracle_variant(
+    dataset_root, manifest, checkpoint, output, seed, variant, **kwargs,
+):
+    if variant not in ORACLE_VARIANTS:
+        raise ValueError(f"unknown oracle variant: {variant}")
+    temporal, material = ORACLE_VARIANTS[variant]
+    builder = OracleConditionBuilder(dataset_root, temporal, material)
+    return train_v42_gate2(
+        dataset_root, manifest, checkpoint, output, seed,
+        loss_options=LOSS_CONTRACT, stage_weight_mode="total_mass",
+        oracle_condition_dim=ORACLE_DIM, condition_builder=builder,
+        condition_name=variant, exploratory_control=True,
+        experiment_name="v42_oracle_controlled_group_" + variant,
+        model_contract_version="oracle_controlled_group_v1",
+        **kwargs,
+    )
+
+
+EFFECT_METRICS = (
+    "stage_weighted_canonical_nrmse",
+    "stage_weighted_strain_rmse",
+    "uid_balanced_magnitude_correlation",
+    "uid_balanced_predicted_to_target_peak_ratio",
+    "median_onset_error_frames",
+    "median_peak_error_frames",
+)
+
+
+def summarize_controlled_matrix(root, variants, seeds):
+    """Write descriptive factorial effects; never produce a pass/fail verdict."""
+    root = Path(root)
+    cells = {}
+    for variant in variants:
+        reports = []
+        for seed in seeds:
+            path = root / variant / f"seed{seed}" / "VALIDATION_SCREEN.json"
+            if not path.exists():
+                return None
+            reports.append(json.loads(path.read_text())["geometry_only"])
+        cells[variant] = {}
+        groups = sorted(set.intersection(*(set(report) for report in reports)))
+        for group in groups:
+            cells[variant][group] = {}
+            for metric in EFFECT_METRICS:
+                values = [report[group].get(metric) for report in reports]
+                usable = [value for value in values if value is not None]
+                cells[variant][group][metric] = {
+                    "per_seed": dict(zip(map(str, seeds), values)),
+                    "mean": float(np.mean(usable)) if usable else None,
+                }
+    effects = {}
+    required = set(ORACLE_VARIANTS)
+    if required.issubset(cells):
+        for group in cells["geometry_control"]:
+            effects[group] = {}
+            for metric in EFFECT_METRICS:
+                means = {
+                    variant: cells[variant][group][metric]["mean"]
+                    for variant in required
+                }
+                if any(value is None for value in means.values()):
+                    continue
+                c, t = means["geometry_control"], means["oracle_temporal"]
+                m, b = means["oracle_material"], means["oracle_both"]
+                effects[group][metric] = {
+                    "temporal_main_effect": ((t - c) + (b - m)) / 2,
+                    "material_main_effect": ((m - c) + (b - t)) / 2,
+                    "interaction": b - t - m + c,
+                    "direction": (
+                        "higher_is_better" if metric ==
+                        "uid_balanced_magnitude_correlation" else
+                        "closer_to_one_is_better" if metric ==
+                        "uid_balanced_predicted_to_target_peak_ratio" else
+                        "lower_is_better"
+                    ),
+                }
+    report = {
+        "analysis": "descriptive_2x2_controlled_group_not_a_gate",
+        "decision": None,
+        "variants": ORACLE_VARIANTS,
+        "cells": cells,
+        "factorial_effects": effects,
+        "interpretation": {
+            "temporal_only_helps": "timing/state ambiguity is implicated",
+            "material_only_helps": "material ambiguity is implicated",
+            "both_only_helps": "the factors interact or both are required",
+            "neither_helps": (
+                "prioritize representation, decoder optimization, targets, "
+                "or signal-to-noise rather than missing oracle context"
+            ),
+        },
+    }
+    path = root / "CONTROLLED_EFFECTS.json"
+    path.write_text(json.dumps(report, indent=2) + "\n")
+    return path
