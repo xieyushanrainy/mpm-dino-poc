@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """One-batch CPU smoke test for the V4.3 attended-memory contract."""
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -12,7 +13,7 @@ sys.path.insert(0, str(ROOT / "v4" / "src"))
 from mpm_dino_v4.v43_retrieval import AttendedMechanicalMemory  # noqa: E402
 
 
-def main():
+def main(output_path):
     torch.manual_seed(42)
     module = AttendedMechanicalMemory(24, 32, hidden_dim=32, heads=4)
     base = torch.randn(1, 3, 16, 3)
@@ -36,11 +37,16 @@ def main():
         "zero_memory_exact_equivalence": bool(torch.equal(zero, base)),
         "test_data_used": False,
     }
-    output_path = ROOT / "v43" / "run" / "cpu_smoke" / "RUN_COMPLETE.json"
+    output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--output",
+        default=ROOT / "v43" / "run" / "cpu_smoke" / "RUN_COMPLETE.json",
+    )
+    main(parser.parse_args().output)
