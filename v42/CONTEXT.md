@@ -2,11 +2,13 @@
 
 ## Status
 
-Gate 0 and the Gate-1 rotation investigation are complete. No rotation
-formulation passed its promotion screen. Gate 1E is retained only as a frozen
-operational placeholder for the now-implemented, not-yet-trained Gate-2
-geometry-only canonical-local screen. Gate 2 does not authorize Gate 3 or DINO
-training.
+V4.2 is complete. The authoritative closeout is
+[`V42_EXPERIMENT_SUMMARY.md`](V42_EXPERIMENT_SUMMARY.md); the remainder of this
+file records the context at the start of V4.2. No rotation formulation passed
+its promotion screen. The final research champion is the oracle-conditioned
+adapter checkpoint recorded in [`checkpoints/MANIFEST.json`](checkpoints/MANIFEST.json).
+V4.3 is authorized as a new, controlled retrieval-conditioned DINO exploration,
+not as a retrospective V4.2 Gate-3 pass.
 
 The frozen V4.1 UID split and dataset remain the starting point. V4.2 must not
 silently change the dataset, split, evaluator, or earlier results.

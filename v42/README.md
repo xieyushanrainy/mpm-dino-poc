@@ -2,15 +2,20 @@
 
 V4.2 separates COM/rigid motion from local deformation, corrects
 rotation-contaminated supervision, and tests stage-aware deformation learning
-with controlled gradient routing. Gate 0 and the Gate-1 rotation experiments
-are complete; Gate 2 is the next protected architecture screen.
+with controlled gradient routing. The V4.2 exploration is now closed. Its final
+evidence summary, retained champion, limitations, and V4.3 decision are in
+[`V42_EXPERIMENT_SUMMARY.md`](V42_EXPERIMENT_SUMMARY.md). Historical gate
+sections below preserve the experiment sequence and should not be read as the
+current project status.
 
 Read in this order:
 
-1. [`CONTEXT.md`](CONTEXT.md)
-2. [`PLAN.md`](PLAN.md)
-3. [`ROTATION_EXPERIMENT_RESULTS.md`](ROTATION_EXPERIMENT_RESULTS.md)
-4. [`GATE2_HANDOVER_PROMPT.md`](GATE2_HANDOVER_PROMPT.md)
+1. [`V42_EXPERIMENT_SUMMARY.md`](V42_EXPERIMENT_SUMMARY.md)
+2. [`checkpoints/MANIFEST.json`](checkpoints/MANIFEST.json)
+3. [`CONTEXT.md`](CONTEXT.md)
+4. [`PLAN.md`](PLAN.md)
+5. [`ROTATION_EXPERIMENT_RESULTS.md`](ROTATION_EXPERIMENT_RESULTS.md)
+6. [`GATE2_HANDOVER_PROMPT.md`](GATE2_HANDOVER_PROMPT.md) (historical)
 
 Implementation scaffolding now lives in `v4/src/mpm_dino_v4/v42_*.py`.
 It provides rotation-aware targets, protected global/local gradient routing,

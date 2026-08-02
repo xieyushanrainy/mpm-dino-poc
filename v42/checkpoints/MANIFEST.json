@@ -1,0 +1,20 @@
+{
+  "version": "v42_champion_manifest_v1",
+  "checkpoint": "v42_adapter_full_seed42_best.pt",
+  "sha256": "85dd4bb3024268ec1b2dedbf1a6ed09d1175628a8f1cdb995060fcf5430c4dfb",
+  "bytes": 8440655,
+  "source": "v42/run/direct_decoder_probe_seed42_456/adapter_full/seed42/best.pt",
+  "source_experiment": "v42_direct_decoder_probe_adapter_full",
+  "seed": 42,
+  "best_epoch": 13,
+  "validation_event_normalized_mse": 0.777190911769867,
+  "status": "v42_research_champion_not_a_passed_gate",
+  "architecture": "physics trunk plus COM, rotation, and canonical-deformation heads; oracle full condition injected before region adapter",
+  "condition": [
+    "future-ground-truth floor contact features",
+    "fixed reference curvature proxies",
+    "ground-truth impact stage and normalized event time"
+  ],
+  "deployment_warning": "The champion consumes target-derived oracle contact and event timing. It is a V4.3 initialization and controlled reference, not an inference-ready checkpoint.",
+  "test_data_used_for_selection": false
+}

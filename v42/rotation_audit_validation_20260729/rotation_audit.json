@@ -1,0 +1,2450 @@
+{
+  "experiment": "v42_validation_only_rotation_audit",
+  "split": "validation",
+  "test_data_used": false,
+  "trained_model_used": false,
+  "horizons": [
+    1,
+    8,
+    16,
+    30,
+    40,
+    59
+  ],
+  "constant_angular_definition": "proper Kabsch x0->x1 rotation, extrapolated h steps in SO(3)",
+  "contact_source": "v42/target_stage_audit.json",
+  "diagnostics": {
+    "episodes": 16,
+    "uids": 10,
+    "overall_identity_mean_error_rad": 0.041370488717370764,
+    "overall_constant_angular_mean_error_rad": 0.041369234408465995,
+    "overall_constant_angular_improvement_fraction": 3.0318928870721818e-05,
+    "overall_constant_angular_episode_horizon_win_fraction": 0.4583333333333333,
+    "invalid_target_frames_at_1e-3": 0,
+    "minimum_singular_ratio": 0.0070323065180446665,
+    "singular_ratio_vs_angular_step_change_correlation": -0.2962555079414257,
+    "deformation_vs_angular_step_change_correlation": -0.48073308328978037,
+    "impact_delta_speed_median_rad_s": 0.8558594607348529,
+    "postimpact_delta_speed_median_rad_s": 0.0926970038143598,
+    "maximum_observed_step_angle_rad": 9.699643465338883e-07
+  },
+  "stratified_horizons": {
+    "rigid/panel_V": {
+      "episodes": 6,
+      "uids": 2,
+      "horizons": {
+        "h1": {
+          "episode_count": 6,
+          "identity_mean_error_rad": 3.5122373759078364e-09,
+          "constant_angular_mean_error_rad": 3.5122373759078364e-09,
+          "constant_angular_improvement_fraction": 0.0,
+          "constant_angular_episode_win_fraction": 0.0,
+          "target_mean_angle_rad": 5.5985213436087764e-09,
+          "target_median_angle_rad": 5.87850552381167e-09,
+          "target_mean_rotation_vector_rad": [
+            -6.690888415138378e-10,
+            -2.96750595255123e-10,
+            -5.772047021525684e-10
+          ],
+          "target_direction_consistency": 0.1664995542966253
+        },
+        "h8": {
+          "episode_count": 6,
+          "identity_mean_error_rad": 0.09789011521854785,
+          "constant_angular_mean_error_rad": 0.0978901143279217,
+          "constant_angular_improvement_fraction": 9.098223454859636e-09,
+          "constant_angular_episode_win_fraction": 0.5,
+          "target_mean_angle_rad": 0.09789011521854751,
+          "target_median_angle_rad": 0.09795819808031234,
+          "target_mean_rotation_vector_rad": [
+            -0.07232442906152593,
+            0.05955641760782399,
+            -0.00021759045580614528
+          ],
+          "target_direction_consistency": 0.9570947253679501
+        },
+        "h16": {
+          "episode_count": 6,
+          "identity_mean_error_rad": 0.02116194804913594,
+          "constant_angular_mean_error_rad": 0.021161937052868715,
+          "constant_angular_improvement_fraction": 5.196245261121792e-07,
+          "constant_angular_episode_win_fraction": 0.6666666666666666,
+          "target_mean_angle_rad": 0.02116194804914694,
+          "target_median_angle_rad": 0.0209730431276612,
+          "target_mean_rotation_vector_rad": [
+            -0.014180011662341443,
+            0.007924949916555936,
+            6.670222087421407e-06
+          ],
+          "target_direction_consistency": 0.7676188379595109
+        },
+        "h30": {
+          "episode_count": 6,
+          "identity_mean_error_rad": 0.0568850995542368,
+          "constant_angular_mean_error_rad": 0.05688509953980695,
+          "constant_angular_improvement_fraction": 2.536665369294336e-10,
+          "constant_angular_episode_win_fraction": 0.5,
+          "target_mean_angle_rad": 0.056885099554233855,
+          "target_median_angle_rad": 0.05648451256787816,
+          "target_mean_rotation_vector_rad": [
+            -0.0487629150984621,
+            0.026526599842546614,
+            -7.276674552421402e-05
+          ],
+          "target_direction_consistency": 0.9758469197275093
+        },
+        "h40": {
+          "episode_count": 6,
+          "identity_mean_error_rad": 0.0406112223194643,
+          "constant_angular_mean_error_rad": 0.040611196446463174,
+          "constant_angular_improvement_fraction": 6.370899383419756e-07,
+          "constant_angular_episode_win_fraction": 0.6666666666666666,
+          "target_mean_angle_rad": 0.04061122231946258,
+          "target_median_angle_rad": 0.04034513788674004,
+          "target_mean_rotation_vector_rad": [
+            -0.02925099806700221,
+            0.01797169839235073,
+            -6.865368104163798e-05
+          ],
+          "target_direction_consistency": 0.8453538740145017
+        },
+        "h59": {
+          "episode_count": 6,
+          "identity_mean_error_rad": 0.017080368745513674,
+          "constant_angular_mean_error_rad": 0.01708035964031418,
+          "constant_angular_improvement_fraction": 5.330797964225682e-07,
+          "constant_angular_episode_win_fraction": 0.5,
+          "target_mean_angle_rad": 0.01708036874550671,
+          "target_median_angle_rad": 0.017744375125965814,
+          "target_mean_rotation_vector_rad": [
+            -0.009898582541813876,
+            0.010696034843820099,
+            6.124347416164769e-05
+          ],
+          "target_direction_consistency": 0.8532389204903088
+        }
+      }
+    },
+    "rigid/panel_Z": {
+      "episodes": 5,
+      "uids": 5,
+      "horizons": {
+        "h1": {
+          "episode_count": 5,
+          "identity_mean_error_rad": 8.429369702178806e-09,
+          "constant_angular_mean_error_rad": 8.429369702178806e-09,
+          "constant_angular_improvement_fraction": 0.0,
+          "constant_angular_episode_win_fraction": 0.0,
+          "target_mean_angle_rad": 1.5068571753361404e-09,
+          "target_median_angle_rad": 1.0649678947917218e-09,
+          "target_mean_rotation_vector_rad": [
+            -3.49259002298463e-11,
+            -2.837140438414589e-10,
+            -8.429825471423509e-12
+          ],
+          "target_direction_consistency": 0.18978571261135344
+        },
+        "h8": {
+          "episode_count": 5,
+          "identity_mean_error_rad": 0.06911029065953918,
+          "constant_angular_mean_error_rad": 0.06911028886181836,
+          "constant_angular_improvement_fraction": 2.601234638537311e-08,
+          "constant_angular_episode_win_fraction": 0.6,
+          "target_mean_angle_rad": 0.06911029065952927,
+          "target_median_angle_rad": 0.09450027558509858,
+          "target_mean_rotation_vector_rad": [
+            -0.019366013178094638,
+            0.04724650410987269,
+            -0.0035985431866455185
+          ],
+          "target_direction_consistency": 0.7406729794467728
+        },
+        "h16": {
+          "episode_count": 5,
+          "identity_mean_error_rad": 0.018135928725963722,
+          "constant_angular_mean_error_rad": 0.018135925999332093,
+          "constant_angular_improvement_fraction": 1.5034419631952807e-07,
+          "constant_angular_episode_win_fraction": 0.6,
+          "target_mean_angle_rad": 0.018135928725977864,
+          "target_median_angle_rad": 0.011741762665453882,
+          "target_mean_rotation_vector_rad": [
+            -0.004243689613046122,
+            0.005720318629970753,
+            -0.004509563207404107
+          ],
+          "target_direction_consistency": 0.4648303945584244
+        },
+        "h30": {
+          "episode_count": 5,
+          "identity_mean_error_rad": 0.030891143349086613,
+          "constant_angular_mean_error_rad": 0.030891137123866826,
+          "constant_angular_improvement_fraction": 2.0152118415389395e-07,
+          "constant_angular_episode_win_fraction": 0.6,
+          "target_mean_angle_rad": 0.03089114334910295,
+          "target_median_angle_rad": 0.030926823433588206,
+          "target_mean_rotation_vector_rad": [
+            -0.016996407636301836,
+            0.011299951540764666,
+            -0.0070596864212801175
+          ],
+          "target_direction_consistency": 0.6991140950354169
+        },
+        "h40": {
+          "episode_count": 5,
+          "identity_mean_error_rad": 0.03286347201091489,
+          "constant_angular_mean_error_rad": 0.032863463787260835,
+          "constant_angular_improvement_fraction": 2.50236921211709e-07,
+          "constant_angular_episode_win_fraction": 0.6,
+          "target_mean_angle_rad": 0.03286347201091009,
+          "target_median_angle_rad": 0.027194603464507517,
+          "target_mean_rotation_vector_rad": [
+            -0.007406083660492555,
+            0.010279309540470943,
+            -0.00821007872746353
+          ],
+          "target_direction_consistency": 0.4593856888508923
+        },
+        "h59": {
+          "episode_count": 5,
+          "identity_mean_error_rad": 0.02095808856517134,
+          "constant_angular_mean_error_rad": 0.020958078879280598,
+          "constant_angular_improvement_fraction": 4.621552539068612e-07,
+          "constant_angular_episode_win_fraction": 0.6,
+          "target_mean_angle_rad": 0.020958088565182553,
+          "target_median_angle_rad": 0.020108819054593937,
+          "target_mean_rotation_vector_rad": [
+            -0.0017312403727807453,
+            0.006115004198617184,
+            -0.008907266550581789
+          ],
+          "target_direction_consistency": 0.5220950536725869
+        }
+      }
+    },
+    "soft_body/panel_Z": {
+      "episodes": 5,
+      "uids": 5,
+      "horizons": {
+        "h1": {
+          "episode_count": 5,
+          "identity_mean_error_rad": 1.0297277421278104e-06,
+          "constant_angular_mean_error_rad": 1.381613139549065e-06,
+          "constant_angular_improvement_fraction": -0.34172663610492326,
+          "constant_angular_episode_win_fraction": 0.0,
+          "target_mean_angle_rad": 1.0329531840690322e-06,
+          "target_median_angle_rad": 1.4504012478067e-07,
+          "target_mean_rotation_vector_rad": [
+            -7.496273848698601e-07,
+            3.314190622749898e-07,
+            -5.684616090890531e-08
+          ],
+          "target_direction_consistency": 0.7953803948069201
+        },
+        "h8": {
+          "episode_count": 5,
+          "identity_mean_error_rad": 0.008156908912277735,
+          "constant_angular_mean_error_rad": 0.00815808110006974,
+          "constant_angular_improvement_fraction": -0.0001437049015271546,
+          "constant_angular_episode_win_fraction": 0.2,
+          "target_mean_angle_rad": 0.008156908912369122,
+          "target_median_angle_rad": 0.003955247473739353,
+          "target_mean_rotation_vector_rad": [
+            -0.0021113027091204735,
+            0.0040465115444016245,
+            0.0005291642707808966
+          ],
+          "target_direction_consistency": 0.5632973850185
+        },
+        "h16": {
+          "episode_count": 5,
+          "identity_mean_error_rad": 0.018715294714428864,
+          "constant_angular_mean_error_rad": 0.0187131212346528,
+          "constant_angular_improvement_fraction": 0.00011613387922703107,
+          "constant_angular_episode_win_fraction": 0.4,
+          "target_mean_angle_rad": 0.018715294714511693,
+          "target_median_angle_rad": 0.004858272826244257,
+          "target_mean_rotation_vector_rad": [
+            -0.0010824028807329533,
+            0.016119629746679433,
+            -0.00017462279355149942
+          ],
+          "target_direction_consistency": 0.8632978249967339
+        },
+        "h30": {
+          "episode_count": 5,
+          "identity_mean_error_rad": 0.047987929115516734,
+          "constant_angular_mean_error_rad": 0.047983033560441965,
+          "constant_angular_improvement_fraction": 0.00010201638547444061,
+          "constant_angular_episode_win_fraction": 0.6,
+          "target_mean_angle_rad": 0.04798792911552474,
+          "target_median_angle_rad": 0.021225153857016538,
+          "target_mean_rotation_vector_rad": [
+            -0.00043178771934489836,
+            0.0369047168481915,
+            -7.597852921263043e-05
+          ],
+          "target_direction_consistency": 0.7690959293493894
+        },
+        "h40": {
+          "episode_count": 5,
+          "identity_mean_error_rad": 0.06163596018536952,
+          "constant_angular_mean_error_rad": 0.06162934889131864,
+          "constant_angular_improvement_fraction": 0.00010726358494296274,
+          "constant_angular_episode_win_fraction": 0.6,
+          "target_mean_angle_rad": 0.061635960185359884,
+          "target_median_angle_rad": 0.05757755140404334,
+          "target_mean_rotation_vector_rad": [
+            0.0021008129807162474,
+            0.03523354739784105,
+            5.639254570822139e-06
+          ],
+          "target_direction_consistency": 0.5726547139198985
+        },
+        "h59": {
+          "episode_count": 5,
+          "identity_mean_error_rad": 0.2055028200991751,
+          "constant_angular_mean_error_rad": 0.20549097853846138,
+          "constant_angular_improvement_fraction": 5.7622375731853296e-05,
+          "constant_angular_episode_win_fraction": 0.6,
+          "target_mean_angle_rad": 0.20550282009916637,
+          "target_median_angle_rad": 0.2654967890205426,
+          "target_mean_rotation_vector_rad": [
+            0.06904436965655852,
+            0.024530614393966105,
+            -0.002275938880379709
+          ],
+          "target_direction_consistency": 0.3567248012155506
+        }
+      }
+    }
+  },
+  "grouped_impact_diagnostics": {
+    "rigid/panel_V": {
+      "observed_step_median_angle_rad": 4.341327960929971e-09,
+      "precontact_median_angular_speed_rad_s": 2.7417396012130253e-08,
+      "impact_delta_median_rad_s": 0.9714114855623668,
+      "postimpact_delta_median_rad_s": 0.12287368503706136,
+      "minimum_singular_ratio": 0.15872063335804973,
+      "singular_ratio_vs_angular_step_change_correlation": 0.9999999999999231,
+      "deformation_vs_angular_step_change_correlation": 0.9436657276012284
+    },
+    "rigid/panel_Z": {
+      "observed_step_median_angle_rad": 9.408998740027348e-10,
+      "precontact_median_angular_speed_rad_s": 1.2502300361809815e-08,
+      "impact_delta_median_rad_s": 0.9723187537132858,
+      "postimpact_delta_median_rad_s": 0.10391135766112641,
+      "minimum_singular_ratio": 0.0070323065180446665,
+      "singular_ratio_vs_angular_step_change_correlation": -0.4012418606476336,
+      "deformation_vs_angular_step_change_correlation": -0.3888561693465054
+    },
+    "soft_body/panel_Z": {
+      "observed_step_median_angle_rad": 2.933404552119257e-07,
+      "precontact_median_angular_speed_rad_s": 2.7560769040165022e-05,
+      "impact_delta_median_rad_s": 0.014131746151080543,
+      "postimpact_delta_median_rad_s": 0.014636864216076382,
+      "minimum_singular_ratio": 0.3533215965136153,
+      "singular_ratio_vs_angular_step_change_correlation": -0.18583476606966026,
+      "deformation_vs_angular_step_change_correlation": -0.5512375374244781
+    }
+  },
+  "paired_uid_panel_repeatability": {
+    "35f421cf57794d50b34709b48f784089": {
+      "h1": {
+        "panel_v_episodes": 3,
+        "panel_z_to_panel_v_mean_geodesic_rad": 0.0,
+        "panel_z_to_panel_v_max_geodesic_rad": 0.0
+      },
+      "h8": {
+        "panel_v_episodes": 3,
+        "panel_z_to_panel_v_mean_geodesic_rad": 0.0006119987490794329,
+        "panel_z_to_panel_v_max_geodesic_rad": 0.000612003685097713
+      },
+      "h16": {
+        "panel_v_episodes": 3,
+        "panel_z_to_panel_v_mean_geodesic_rad": 0.005138462621122827,
+        "panel_z_to_panel_v_max_geodesic_rad": 0.005138466384811785
+      },
+      "h30": {
+        "panel_v_episodes": 3,
+        "panel_z_to_panel_v_mean_geodesic_rad": 0.007828324022164905,
+        "panel_z_to_panel_v_max_geodesic_rad": 0.007828326513829987
+      },
+      "h40": {
+        "panel_v_episodes": 3,
+        "panel_z_to_panel_v_mean_geodesic_rad": 0.018045025240923235,
+        "panel_z_to_panel_v_max_geodesic_rad": 0.018045026817439164
+      },
+      "h59": {
+        "panel_v_episodes": 3,
+        "panel_z_to_panel_v_mean_geodesic_rad": 7.906472911177745e-05,
+        "panel_z_to_panel_v_max_geodesic_rad": 0.00014728760011667073
+      }
+    },
+    "57113d79a15b409986182e304f303520": {
+      "h1": {
+        "panel_v_episodes": 3,
+        "panel_z_to_panel_v_mean_geodesic_rad": 0.0,
+        "panel_z_to_panel_v_max_geodesic_rad": 0.0
+      },
+      "h8": {
+        "panel_v_episodes": 3,
+        "panel_z_to_panel_v_mean_geodesic_rad": 0.0014614367922752749,
+        "panel_z_to_panel_v_max_geodesic_rad": 0.0015329668887712883
+      },
+      "h16": {
+        "panel_v_episodes": 3,
+        "panel_z_to_panel_v_mean_geodesic_rad": 0.0010843908024883312,
+        "panel_z_to_panel_v_max_geodesic_rad": 0.001458694974614252
+      },
+      "h30": {
+        "panel_v_episodes": 3,
+        "panel_z_to_panel_v_mean_geodesic_rad": 0.0018841829438081181,
+        "panel_z_to_panel_v_max_geodesic_rad": 0.0022945951236958404
+      },
+      "h40": {
+        "panel_v_episodes": 3,
+        "panel_z_to_panel_v_mean_geodesic_rad": 0.0018372424658901663,
+        "panel_z_to_panel_v_max_geodesic_rad": 0.002340741885195688
+      },
+      "h59": {
+        "panel_v_episodes": 3,
+        "panel_z_to_panel_v_mean_geodesic_rad": 0.006673049229893954,
+        "panel_z_to_panel_v_max_geodesic_rad": 0.007711196400974392
+      }
+    }
+  },
+  "episodes": [
+    {
+      "uid": "00b78f7c14184e76805e0cea44aa5acb",
+      "episode_id": "00b78f7c14184e76805e0cea44aa5acb__zero",
+      "family": "rigid",
+      "panel": "Z",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        5.641167939747417e-15,
+        1.3838690871400593e-16,
+        -2.825741462596882e-18
+      ],
+      "observed_step_angle_rad": 5.642865818513882e-15,
+      "observed_step_singular_values": [
+        148.14502308199457,
+        1.041801263505664,
+        0.7350046278371892
+      ],
+      "observed_step_singular_ratio": 0.007032306869526443,
+      "minimum_target_singular_ratio": 0.0070323065180446665,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        5.641167717090043e-14,
+        1.3838684454600939e-15,
+        -2.686672582727256e-17
+      ],
+      "impact_angular_velocity_rad_s": [
+        1.6837984061756273,
+        1.9768002068655681,
+        -0.043480162087073566
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.5657346194397288,
+        -0.6738592892362626,
+        -0.09156044877568119
+      ],
+      "initial_to_precontact_cosine": null,
+      "impact_delta_angular_velocity_rad_s": [
+        1.6837984061755709,
+        1.9768002068655668,
+        -0.04348016208707354
+      ],
+      "impact_delta_speed_rad_s": 2.597076559325554,
+      "postimpact_delta_speed_rad_s": 0.8846046106044697,
+      "maximum_angular_step_change_rad_s": 3.298739853721833,
+      "maximum_canonical_residual_nrmse": 2.005101474790539e-08,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            -2.6302447067551755e-09,
+            -4.179724363718307e-10,
+            1.1897710424100834e-12
+          ],
+          "target_angle_rad": 2.6632479401166083e-09,
+          "identity_error_rad": 2.1073424255447017e-08,
+          "constant_angular_error_rad": 2.1073424255447017e-08,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.007032307189104872,
+          "canonical_residual_nrmse": 5.131052013704088e-09
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            0.05635095802206371,
+            0.11488294811166302,
+            -0.009578688917086676
+          ],
+          "target_angle_rad": 0.1283170819423578,
+          "identity_error_rad": 0.12831708194235708,
+          "constant_angular_error_rad": 0.12831708194235708,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.007032306579926361,
+          "canonical_residual_nrmse": 1.805623036302944e-08
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            0.019631196611328307,
+            0.008999133007511996,
+            -0.01460345807368226
+          ],
+          "target_angle_rad": 0.026069700093965704,
+          "identity_error_rad": 0.02606970009397538,
+          "constant_angular_error_rad": 0.02606970009397538,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.007032306782485187,
+          "canonical_residual_nrmse": 1.4200768366705684e-08
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            0.011927628650108617,
+            0.008547568191675278,
+            -0.02722387115173207
+          ],
+          "target_angle_rad": 0.030926823433588206,
+          "identity_error_rad": 0.030926823433583515,
+          "constant_angular_error_rad": 0.030926823433583515,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.007032306755411086,
+          "canonical_residual_nrmse": 1.9198580926235213e-08
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            0.042757029239852,
+            0.006953507183807195,
+            -0.03301197852988283
+          ],
+          "target_angle_rad": 0.05446380025328992,
+          "identity_error_rad": 0.054463800253299124,
+          "constant_angular_error_rad": 0.054463800253299124,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.007032307011807981,
+          "canonical_residual_nrmse": 1.3204787552909283e-08
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            0.024492741297669,
+            0.0066866232185846496,
+            -0.036703117122626756
+          ],
+          "target_angle_rad": 0.0446287364022231,
+          "identity_error_rad": 0.04462873640222082,
+          "constant_angular_error_rad": 0.04462873640222082,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.0070323072420651125,
+          "canonical_residual_nrmse": 1.86692710738168e-08
+        }
+      }
+    },
+    {
+      "uid": "0214bece40234bae91ba427f056a0c28",
+      "episode_id": "0214bece40234bae91ba427f056a0c28__zero",
+      "family": "rigid",
+      "panel": "Z",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        -3.806617629380799e-10,
+        -9.087083402974565e-10,
+        -3.404443942733097e-12
+      ],
+      "observed_step_angle_rad": 9.852237389181426e-10,
+      "observed_step_singular_values": [
+        147.12094995865644,
+        29.404619880620256,
+        18.344587183916364
+      ],
+      "observed_step_singular_ratio": 0.19986697944027326,
+      "minimum_target_singular_ratio": 0.1998669689461432,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        -6.692496199016373e-09,
+        1.0560208574697371e-08,
+        -1.954980654162704e-12
+      ],
+      "impact_angular_velocity_rad_s": [
+        0.4234998690443371,
+        0.07261182465949031,
+        -0.02754994568178846
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.21267221064462294,
+        -0.037296992011201166,
+        -0.07241352249674758
+      ],
+      "initial_to_precontact_cosine": null,
+      "impact_delta_angular_velocity_rad_s": [
+        0.42349987573683334,
+        0.07261181409928175,
+        -0.027549945679833477
+      ],
+      "impact_delta_speed_rad_s": 0.4305619813718621,
+      "postimpact_delta_speed_rad_s": 0.227737241080089,
+      "maximum_angular_step_change_rad_s": 0.9700254325772106,
+      "maximum_canonical_residual_nrmse": 2.9119908167358142e-08,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            4.4152124715237e-10,
+            9.691240585100355e-10,
+            3.7635710655334245e-12
+          ],
+          "target_angle_rad": 1.0649678947917218e-09,
+          "identity_error_rad": 0.0,
+          "constant_angular_error_rad": 0.0,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.19986697943952447,
+          "canonical_residual_nrmse": 1.49817651773144e-08
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -0.00013239467890822156,
+            -7.418392761584728e-07,
+            -0.01160878140345076
+          ],
+          "target_angle_rad": 0.011609536363457108,
+          "identity_error_rad": 0.011609536363473848,
+          "constant_angular_error_rad": 0.011609536301045009,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.19986696924530037,
+          "canonical_residual_nrmse": 2.8218930744986895e-08
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            -0.00013239706943060948,
+            -7.68941339586349e-07,
+            -0.0116085481315263
+          ],
+          "target_angle_rad": 0.011609303135728145,
+          "identity_error_rad": 0.011609303135673859,
+          "constant_angular_error_rad": 0.011609303010813673,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.1998669692271988,
+          "canonical_residual_nrmse": 2.745176463799528e-08
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            -0.0001324091455123592,
+            -7.692003834701432e-07,
+            -0.01160808270900435
+          ],
+          "target_angle_rad": 0.011608837881225248,
+          "identity_error_rad": 0.011608837881215221,
+          "constant_angular_error_rad": 0.01160883764707386,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.19986698110687895,
+          "canonical_residual_nrmse": 2.647824708991428e-08
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            -0.00013242613965215228,
+            -7.6860478484937e-07,
+            -0.011607758293261486
+          ],
+          "target_angle_rad": 0.01160851368039842,
+          "identity_error_rad": 0.011608513680463995,
+          "constant_angular_error_rad": 0.011608513368254043,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.19986698130227112,
+          "canonical_residual_nrmse": 2.5948430155935288e-08
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            -0.00013239577575466612,
+            -7.679794918479178e-07,
+            -0.01160739320672953
+          ],
+          "target_angle_rad": 0.011608148271230042,
+          "identity_error_rad": 0.011608148271188216,
+          "constant_angular_error_rad": 0.011608147810777857,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.1998669813706604,
+          "canonical_residual_nrmse": 2.4890375393174874e-08
+        }
+      }
+    },
+    {
+      "uid": "02bd4de0a76b4f788863b2ef719f0bbd",
+      "episode_id": "02bd4de0a76b4f788863b2ef719f0bbd__zero",
+      "family": "rigid",
+      "panel": "Z",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        8.880636191675706e-10,
+        3.1068411039205664e-10,
+        -1.0533981168325373e-11
+      ],
+      "observed_step_angle_rad": 9.408998740027348e-10,
+      "observed_step_singular_values": [
+        162.6236718039419,
+        69.10950497007606,
+        28.273842566090995
+      ],
+      "observed_step_singular_ratio": 0.4249658380201503,
+      "minimum_target_singular_ratio": 0.4249658258263643,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        -9.66365590710519e-09,
+        -8.625528356964929e-09,
+        7.216850958873801e-11
+      ],
+      "impact_angular_velocity_rad_s": [
+        -0.2935306182803311,
+        0.015075452531821631,
+        0.04031531501464283
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        0.0958610648333438,
+        -0.0003550626782017186,
+        0.007629222239478277
+      ],
+      "initial_to_precontact_cosine": null,
+      "impact_delta_angular_velocity_rad_s": [
+        -0.2935306086166752,
+        0.015075461157349989,
+        0.040315314942474326
+      ],
+      "impact_delta_speed_rad_s": 0.2966695338973879,
+      "postimpact_delta_speed_rad_s": 0.09616484127776542,
+      "maximum_angular_step_change_rad_s": 0.514748905426288,
+      "maximum_canonical_residual_nrmse": 2.326591163325483e-08,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            -3.7754264259914324e-10,
+            -1.5744192583147272e-10,
+            4.2729825350354744e-12
+          ],
+          "target_angle_rad": 4.0907782312172835e-10,
+          "identity_error_rad": 2.1073424255447017e-08,
+          "constant_angular_error_rad": 2.1073424255447017e-08,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.42496583800788473,
+          "canonical_residual_nrmse": 1.3593059619539042e-08
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -0.006786576898283376,
+            0.0009926759110129551,
+            0.003696396512989515
+          ],
+          "target_angle_rad": 0.0077914298201203136,
+          "identity_error_rad": 0.007791429820153456,
+          "constant_angular_error_rad": 0.007791435731726312,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.42496584052196085,
+          "canonical_residual_nrmse": 1.7503619090654006e-08
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            -0.006786607720355106,
+            0.0009927820523709281,
+            0.003695991876604166
+          ],
+          "target_angle_rad": 0.0077912782330897,
+          "identity_error_rad": 0.007791278233054045,
+          "constant_angular_error_rad": 0.007791290056396799,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.4249658401801687,
+          "canonical_residual_nrmse": 1.744159993683267e-08
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            -0.006786607650172545,
+            0.000992780104247577,
+            0.0036959918988869935
+          ],
+          "target_angle_rad": 0.00779127793429349,
+          "identity_error_rad": 0.0077912779342377,
+          "constant_angular_error_rad": 0.007791300103016432,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.42496584015340266,
+          "canonical_residual_nrmse": 1.7428734407731123e-08
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            -0.006786607650172545,
+            0.000992780104247577,
+            0.0036959918988869935
+          ],
+          "target_angle_rad": 0.00779127793429349,
+          "identity_error_rad": 0.0077912779342377,
+          "constant_angular_error_rad": 0.007791307492604826,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.42496584015340266,
+          "canonical_residual_nrmse": 1.7428734407731123e-08
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            -0.006786607651018381,
+            0.0009927800273716535,
+            0.0036959917967608687
+          ],
+          "target_angle_rad": 0.007791277876788436,
+          "identity_error_rad": 0.007791277876782883,
+          "constant_angular_error_rad": 0.0077913214754059676,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.4249658401493956,
+          "canonical_residual_nrmse": 1.7422667089369e-08
+        }
+      }
+    },
+    {
+      "uid": "341fd3bde213474c9cff8d2665afccfd",
+      "episode_id": "341fd3bde213474c9cff8d2665afccfd__soft_free_fall_zero",
+      "family": "soft_body",
+      "panel": "Z",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        -5.306921986215829e-08,
+        2.955517009794315e-07,
+        1.1325060652039074e-07
+      ],
+      "observed_step_angle_rad": 3.209249911207442e-07,
+      "observed_step_singular_values": [
+        167.32341765845067,
+        131.9122353981236,
+        48.895917620265806
+      ],
+      "observed_step_singular_ratio": 0.7883668481323385,
+      "minimum_target_singular_ratio": 0.772603891345462,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        2.8364098037920937e-06,
+        -1.6895703193014113e-06,
+        -1.1040835985151438e-06
+      ],
+      "impact_angular_velocity_rad_s": [
+        0.0033871511135000407,
+        0.01575221397517148,
+        0.0007481703434587937
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.00228894348829214,
+        0.21839737440358847,
+        9.345606920677227e-05
+      ],
+      "initial_to_precontact_cosine": -0.6936207030769973,
+      "impact_delta_angular_velocity_rad_s": [
+        0.0033843147036962487,
+        0.01575390354549078,
+        0.0007492744270573089
+      ],
+      "impact_delta_speed_rad_s": 0.016130730767740305,
+      "postimpact_delta_speed_rad_s": 0.21841110855769877,
+      "maximum_angular_step_change_rad_s": 0.16746098120271105,
+      "maximum_canonical_residual_nrmse": 0.02403048977710054,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            5.321526435814485e-08,
+            5.499106988563962e-08,
+            -4.902364119826208e-08
+          ],
+          "target_angle_rad": 9.088013822728529e-08,
+          "identity_error_rad": 9.185692672385244e-08,
+          "constant_angular_error_rad": 3.08997055192706e-07,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.7883670724929637,
+          "canonical_residual_nrmse": 2.4995518680385883e-06
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -1.950926760772556e-05,
+            0.023358022015049624,
+            5.753225293845526e-05
+          ],
+          "target_angle_rad": 0.023358101015005343,
+          "identity_error_rad": 0.023358101015024918,
+          "constant_angular_error_rad": 0.023355734044443376,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.7861184942937233,
+          "canonical_residual_nrmse": 0.004921657334044727
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            -4.231850550515982e-05,
+            0.07464814721520993,
+            0.00021791535267871604
+          ],
+          "target_angle_rad": 0.07464847728266462,
+          "identity_error_rad": 0.07464847728266173,
+          "constant_angular_error_rad": 0.07464374273178477,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.7799311817133923,
+          "canonical_residual_nrmse": 0.015244485106721549
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            -0.00020190396954877858,
+            0.16834483548726656,
+            0.00040876729964519986
+          ],
+          "target_angle_rad": 0.16834545283776756,
+          "identity_error_rad": 0.1683454528377694,
+          "constant_angular_error_rad": 0.16833657620132284,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.787741839478135,
+          "canonical_residual_nrmse": 0.0093607185738913
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            0.00014446098051204198,
+            0.14651474962706165,
+            0.0003247127938900561
+          ],
+          "target_angle_rad": 0.1465151806662162,
+          "identity_error_rad": 0.14651518066621322,
+          "constant_angular_error_rad": 0.1465033507709666,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.7866461735768766,
+          "canonical_residual_nrmse": 0.009076313437187475
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            0.002415893335448465,
+            0.0612915299224665,
+            1.455089240155688e-06
+          ],
+          "target_angle_rad": 0.06133912440654949,
+          "identity_error_rad": 0.061339124406552994,
+          "constant_angular_error_rad": 0.06132182403082617,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.7870373926352733,
+          "canonical_residual_nrmse": 0.004855255695641527
+        }
+      }
+    },
+    {
+      "uid": "35f421cf57794d50b34709b48f784089",
+      "episode_id": "35f421cf57794d50b34709b48f784089__zero",
+      "family": "rigid",
+      "panel": "Z",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        -1.3273761785194409e-10,
+        2.452480613228513e-10,
+        7.359378104275868e-13
+      ],
+      "observed_step_angle_rad": 2.788663270817877e-10,
+      "observed_step_singular_values": [
+        134.86704002632806,
+        129.21642011380953,
+        30.57028412742574
+      ],
+      "observed_step_singular_ratio": 0.9581022916242884,
+      "minimum_target_singular_ratio": 0.9581022800145315,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        5.525597081625964e-09,
+        3.725693445444292e-09,
+        1.8336260222982885e-11
+      ],
+      "impact_angular_velocity_rad_s": [
+        -0.601364079752589,
+        1.0424922144281834,
+        -0.001744245064904528
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.04120348410036816,
+        -0.030980536707446313,
+        -0.002315352878233189
+      ],
+      "initial_to_precontact_cosine": null,
+      "impact_delta_angular_velocity_rad_s": [
+        -0.6013640852781861,
+        1.0424922107024899,
+        -0.0017442450832407883
+      ],
+      "impact_delta_speed_rad_s": 1.2035081282769735,
+      "postimpact_delta_speed_rad_s": 0.05160312298613413,
+      "maximum_angular_step_change_rad_s": 1.2401925779934908,
+      "maximum_canonical_residual_nrmse": 3.6161059093921056e-08,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            9.309541505296813e-10,
+            1.5746879690541414e-10,
+            1.4367597235586556e-12
+          ],
+          "target_angle_rad": 9.44179070232857e-10,
+          "identity_error_rad": 0.0,
+          "constant_angular_error_rad": 0.0,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.9581022916227852,
+          "canonical_residual_nrmse": 3.6161059093921056e-08
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -0.05857731896943127,
+            0.08512586967132159,
+            0.00014030402111291237
+          ],
+          "target_angle_rad": 0.10333312958661255,
+          "identity_error_rad": 0.10333312958661026,
+          "constant_angular_error_rad": 0.10333312736834985,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.958102291589816,
+          "canonical_residual_nrmse": 3.4826681602427526e-08
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            -0.0011883116605476628,
+            0.011681343518642133,
+            5.585238339199681e-05
+          ],
+          "target_angle_rad": 0.011741762665453882,
+          "identity_error_rad": 0.011741762665481388,
+          "constant_angular_error_rad": 0.011741758546717631,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.9581022950393177,
+          "canonical_residual_nrmse": 3.0803379774719163e-08
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            -0.023656865472126327,
+            0.024593644220356453,
+            0.00014619470110169993
+          ],
+          "target_angle_rad": 0.0341250053903935,
+          "identity_error_rad": 0.034125005390378195,
+          "constant_angular_error_rad": 0.034124997327250856,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.9581023049864928,
+          "canonical_residual_nrmse": 3.543890955410476e-08
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            -0.01265100555228062,
+            0.024072501309941777,
+            0.00011487728592105779
+          ],
+          "target_angle_rad": 0.027194603464507517,
+          "identity_error_rad": 0.027194603464512485,
+          "constant_angular_error_rad": 0.027194592310708053,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.9581022882205333,
+          "canonical_residual_nrmse": 3.0588198981657756e-08
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            -0.005906030183871069,
+            0.01922167240608635,
+            0.00010354298963515256
+          ],
+          "target_angle_rad": 0.020108819054593937,
+          "identity_error_rad": 0.02010881905458076,
+          "constant_angular_error_rad": 0.020108802922937118,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.9581022825150952,
+          "canonical_residual_nrmse": 3.197952198654359e-08
+        }
+      }
+    },
+    {
+      "uid": "57113d79a15b409986182e304f303520",
+      "episode_id": "57113d79a15b409986182e304f303520__zero",
+      "family": "rigid",
+      "panel": "Z",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        -9.713058045392602e-10,
+        1.8143881060811279e-09,
+        3.842286864027827e-11
+      ],
+      "observed_step_angle_rad": 2.0583769048099208e-09,
+      "observed_step_singular_values": [
+        164.25967997857475,
+        26.07140115326346,
+        22.93794149793196
+      ],
+      "observed_step_singular_ratio": 0.15872063769187963,
+      "minimum_target_singular_ratio": 0.1587206346495595,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        7.668755309962225e-09,
+        -1.8737639531213844e-08,
+        -3.322595316046427e-10
+      ],
+      "impact_angular_velocity_rad_s": [
+        -0.9377392805860711,
+        0.256999369406139,
+        -0.00031714322152710307
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.07781341995242917,
+        0.06886636063288351,
+        0.0002500500954870873
+      ],
+      "initial_to_precontact_cosine": null,
+      "impact_delta_angular_velocity_rad_s": [
+        -0.9377392882548264,
+        0.25699938814377854,
+        -0.00031714288926757144
+      ],
+      "impact_delta_speed_rad_s": 0.9723187537132858,
+      "postimpact_delta_speed_rad_s": 0.10391135766112641,
+      "maximum_angular_step_change_rad_s": 0.9074612606328513,
+      "maximum_canonical_residual_nrmse": 2.3925655184815953e-08,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            1.4606824505230361e-09,
+            -1.969748712419441e-09,
+            -5.2812211723655185e-11
+          ],
+          "target_angle_rad": 2.452813148417786e-09,
+          "identity_error_rad": 0.0,
+          "constant_angular_error_rad": 0.0,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.15872063816977228,
+          "canonical_residual_nrmse": 1.3229532311511186e-08
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -0.08768473336591404,
+            0.03523176869464202,
+            -0.0006419461467925818
+          ],
+          "target_angle_rad": 0.09450027558509858,
+          "identity_error_rad": 0.09450027558510121,
+          "constant_angular_error_rad": 0.09450026296561351,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.1587206360961337,
+          "canonical_residual_nrmse": 1.9008880215215316e-08
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            -0.03274232822622554,
+            0.006929103512668295,
+            -8.765409180813576e-05
+          ],
+          "target_angle_rad": 0.033467599501651873,
+          "identity_error_rad": 0.033467599501633936,
+          "constant_angular_error_rad": 0.03346757828875697,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.15872063958473823,
+          "canonical_residual_nrmse": 1.8883509262229374e-08
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            -0.06633378456380656,
+            0.02236653438792749,
+            -0.0003086648456528588
+          ],
+          "target_angle_rad": 0.0700037721060143,
+          "identity_error_rad": 0.07000377210601845,
+          "constant_angular_error_rad": 0.07000372710840946,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.15872063981095594,
+          "canonical_residual_nrmse": 2.0723466666938684e-08
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            -0.06021740820020945,
+            0.01937852770914301,
+            -0.00024152599898138611
+          ],
+          "target_angle_rad": 0.0632591647220611,
+          "identity_error_rad": 0.06325916472206115,
+          "constant_angular_error_rad": 0.06325910551143817,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.1587206395459453,
+          "canonical_residual_nrmse": 2.2852766221723068e-08
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            -0.02032390955092861,
+            0.003674713320535113,
+            -2.5357209948680773e-05
+          ],
+          "target_angle_rad": 0.020653461221077248,
+          "identity_error_rad": 0.02065346122108403,
+          "constant_angular_error_rad": 0.020653385785061224,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.1587206362905083,
+          "canonical_residual_nrmse": 2.0274644570146043e-08
+        }
+      }
+    },
+    {
+      "uid": "6132c68594544694b753b305b50bf66b",
+      "episode_id": "6132c68594544694b753b305b50bf66b__soft_free_fall_zero",
+      "family": "soft_body",
+      "panel": "Z",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        -7.352516783291456e-10,
+        -4.437398225435509e-09,
+        7.095949300668398e-10
+      ],
+      "observed_step_angle_rad": 4.553528632430084e-09,
+      "observed_step_singular_values": [
+        170.04962244786137,
+        107.11947467126494,
+        29.079953627291882
+      ],
+      "observed_step_singular_ratio": 0.6299306821696041,
+      "minimum_target_singular_ratio": 0.6269993346807402,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        2.3474615656357382e-05,
+        -1.4425751165796385e-05,
+        -6.603886538576515e-07
+      ],
+      "impact_angular_velocity_rad_s": [
+        0.00036117394086210167,
+        0.0061782942682224486,
+        2.6671260946749427e-05
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.00014903239938112193,
+        0.005939485876853629,
+        -3.381262149216575e-05
+      ],
+      "initial_to_precontact_cosine": 0.36880401813496255,
+      "impact_delta_angular_velocity_rad_s": [
+        0.0003376993252057443,
+        0.006192720019388245,
+        2.733164960060708e-05
+      ],
+      "impact_delta_speed_rad_s": 0.006201981061874202,
+      "postimpact_delta_speed_rad_s": 0.00595650244816908,
+      "maximum_angular_step_change_rad_s": 0.2864407006306191,
+      "maximum_canonical_residual_nrmse": 0.0158991994437339,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            -6.980159202770888e-09,
+            1.8287249500997254e-08,
+            -1.329492116968484e-09
+          ],
+          "target_angle_rad": 1.9619216755437327e-08,
+          "identity_error_rad": 0.0,
+          "constant_angular_error_rad": 2.1073424255447017e-08,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.6299307084381219,
+          "canonical_residual_nrmse": 8.383447724358264e-07
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -6.33602012875356e-09,
+            0.0010045385014931755,
+            -1.5367110781429242e-07
+          ],
+          "target_angle_rad": 0.001004538513267216,
+          "identity_error_rad": 0.0010045385128100537,
+          "constant_angular_error_rad": 0.0010045740129857811,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.6299093352731857,
+          "canonical_residual_nrmse": 0.0001624469632767959
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            1.6734212660251265e-05,
+            0.0010185503472038581,
+            -6.49475124425536e-06
+          ],
+          "target_angle_rad": 0.001018708508581421,
+          "identity_error_rad": 0.0010187085082589758,
+          "constant_angular_error_rad": 0.0010187797612967837,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.6299275325070056,
+          "canonical_residual_nrmse": 7.474555291104394e-05
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            0.0021357517640108264,
+            0.011048779989215279,
+            4.7574181909184414e-05
+          ],
+          "target_angle_rad": 0.011253410067634775,
+          "identity_error_rad": 0.011253410067597402,
+          "constant_angular_error_rad": 0.011253544865135754,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.6297034905262882,
+          "canonical_residual_nrmse": 0.0005532587898250873
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            0.02219160454680067,
+            0.01820885183193557,
+            0.0002817445982001758
+          ],
+          "target_angle_rad": 0.028707298330173506,
+          "identity_error_rad": 0.028707298330180715,
+          "constant_angular_error_rad": 0.02870743337125106,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.6292450359311892,
+          "canonical_residual_nrmse": 0.0017675898152651204
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            0.36175247266316934,
+            -0.009599323017201906,
+            -0.0008598003282054947
+          ],
+          "target_angle_rad": 0.3618808336136497,
+          "identity_error_rad": 0.36188083361365014,
+          "constant_angular_error_rad": 0.36188087013294795,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.6273958407727771,
+          "canonical_residual_nrmse": 0.0158991994437339
+        }
+      }
+    },
+    {
+      "uid": "877658e8ec83457d9c3673c651ac1395",
+      "episode_id": "877658e8ec83457d9c3673c651ac1395__soft_free_fall_zero",
+      "family": "soft_body",
+      "panel": "Z",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        4.649397468343553e-08,
+        3.2093287372828854e-08,
+        2.8784883860749006e-07
+      ],
+      "observed_step_angle_rad": 2.933404552119257e-07,
+      "observed_step_singular_values": [
+        166.6889567370057,
+        110.72917541973983,
+        22.403147410136473
+      ],
+      "observed_step_singular_ratio": 0.6642862106002818,
+      "minimum_target_singular_ratio": 0.6641900416690584,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        -5.82256964992834e-05,
+        -3.129838369696935e-05,
+        -4.6793214344555714e-06
+      ],
+      "impact_angular_velocity_rad_s": [
+        -0.010031764665146142,
+        -0.005890397990030953,
+        -5.172065112123249e-05
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        0.0054759796544172415,
+        -0.003998767960025818,
+        -2.2050561316496905e-05
+      ],
+      "initial_to_precontact_cosine": -0.26021772368732293,
+      "impact_delta_angular_velocity_rad_s": [
+        -0.009973538968646858,
+        -0.005859099606333984,
+        -4.704132968677692e-05
+      ],
+      "impact_delta_speed_rad_s": 0.01156731345830825,
+      "postimpact_delta_speed_rad_s": 0.006809445312592146,
+      "maximum_angular_step_change_rad_s": 0.07989273902272188,
+      "maximum_canonical_residual_nrmse": 0.053769326121735544,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            3.250282014303799e-08,
+            1.0518205731681942e-08,
+            -8.602665256011177e-07
+          ],
+          "target_angle_rad": 8.609445748936939e-07,
+          "identity_error_rad": 8.609209552797518e-07,
+          "constant_angular_error_rad": 1.148259928781363e-06,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.6642860442315548,
+          "canonical_residual_nrmse": 5.677628610250808e-06
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -0.00026497488295969447,
+            -0.000718954197972368,
+            -3.270530875349537e-06
+          ],
+          "target_angle_rad": 0.0007662359452243162,
+          "identity_error_rad": 0.0007662359452486888,
+          "constant_angular_error_rad": 0.0007666188018143922,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.664331671485755,
+          "canonical_residual_nrmse": 0.0056317245139837335
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            -0.001078290021378413,
+            -0.0009041595184923943,
+            -2.0092630910615977e-05
+          ],
+          "target_angle_rad": 0.0014073441366281264,
+          "identity_error_rad": 0.0014073441366403716,
+          "constant_angular_error_rad": 0.0014083172475993298,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.664426048086235,
+          "canonical_residual_nrmse": 0.02807096823887285
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            0.000344323359560923,
+            -0.006113991755369055,
+            0.0009777831212396167
+          ],
+          "target_angle_rad": 0.006201250969993167,
+          "identity_error_rad": 0.006201250969989176,
+          "constant_angular_error_rad": 0.006200767400899688,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.6643311427551357,
+          "canonical_residual_nrmse": 0.0142054575898131
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            -0.0038844634439411142,
+            -0.0013929437673793085,
+            0.0010018309086418718
+          ],
+          "target_angle_rad": 0.004246529613214292,
+          "identity_error_rad": 0.00424652961326927,
+          "constant_angular_error_rad": 0.004245951722268375,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.6643974050231505,
+          "canonical_residual_nrmse": 0.014578651351830072
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            0.0013946962783886825,
+            0.001281164245549181,
+            0.0009159186434596563
+          ],
+          "target_angle_rad": 0.0021036792755697864,
+          "identity_error_rad": 0.0021036792756097635,
+          "constant_angular_error_rad": 0.002093359095362333,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.6643232642900335,
+          "canonical_residual_nrmse": 0.015923388746656695
+        }
+      }
+    },
+    {
+      "uid": "b62622a23e6645278f8d4e3166440709",
+      "episode_id": "b62622a23e6645278f8d4e3166440709__soft_free_fall_zero",
+      "family": "soft_body",
+      "panel": "Z",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        8.110021417811622e-07,
+        -5.267425005397761e-07,
+        -7.515781861113898e-08
+      ],
+      "observed_step_angle_rad": 9.699643465338883e-07,
+      "observed_step_singular_values": [
+        174.04034642814764,
+        148.78762029457636,
+        59.34158394951787
+      ],
+      "observed_step_singular_ratio": 0.8549030345443673,
+      "minimum_target_singular_ratio": 0.8544769070258452,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        -3.663206719919692e-05,
+        2.579351072736989e-05,
+        9.161444863381234e-06
+      ],
+      "impact_angular_velocity_rad_s": [
+        -0.006438861265916422,
+        0.012611921629579952,
+        -0.0005449951589055289
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.0026567202732744937,
+        0.014387106753335795,
+        0.001070110934670653
+      ],
+      "initial_to_precontact_cosine": -0.9916184916015588,
+      "impact_delta_angular_velocity_rad_s": [
+        -0.006402229198717226,
+        0.012586128118852583,
+        -0.0005541566037689101
+      ],
+      "impact_delta_speed_rad_s": 0.014131746151080543,
+      "postimpact_delta_speed_rad_s": 0.014636864216076382,
+      "maximum_angular_step_change_rad_s": 0.10081778212155107,
+      "maximum_canonical_residual_nrmse": 0.048893331685188626,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            -3.6842256716116424e-06,
+            1.5509259829181698e-06,
+            6.400748864046802e-07
+          ],
+          "target_angle_rad": 4.048281865688074e-06,
+          "identity_error_rad": 4.048346858847318e-06,
+          "constant_angular_error_rad": 5.00355165910671e-06,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.8549043058698724,
+          "canonical_residual_nrmse": 3.7374148499647974e-05
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -0.0012081935679446822,
+            0.003716941870755123,
+            0.0006071194366234986
+          ],
+          "target_angle_rad": 0.003955247473739353,
+          "identity_error_rad": 0.003955247473724371,
+          "constant_angular_error_rad": 0.003961284686704714,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.8837472095345973,
+          "canonical_residual_nrmse": 0.046216501227751804
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            0.00017033982628410357,
+            -0.0048550923584167,
+            4.332884776482832e-05
+          ],
+          "target_angle_rad": 0.004858272826244257,
+          "identity_error_rad": 0.004858272826207621,
+          "constant_angular_error_rad": 0.004849422952427775,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.8552492648149366,
+          "canonical_residual_nrmse": 0.0006108379330332558
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            0.0005837520078055056,
+            -0.021214582327284324,
+            0.00032846084436771364
+          ],
+          "target_angle_rad": 0.021225153857016538,
+          "identity_error_rad": 0.02122515385702286,
+          "constant_angular_error_rad": 0.021208738797681113,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.8561725069648702,
+          "canonical_residual_nrmse": 0.0039176169755593205
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            0.002167193866205594,
+            -0.057529744917351064,
+            0.0008978564339877991
+          ],
+          "target_angle_rad": 0.05757755140404334,
+          "identity_error_rad": 0.05757755140403929,
+          "constant_angular_error_rad": 0.05755533383070751,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.8569525751698439,
+          "canonical_residual_nrmse": 0.008686913434194029
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            0.010577846992914579,
+            -0.26526475046541326,
+            0.0033565300140210746
+          ],
+          "target_angle_rad": 0.2654967890205426,
+          "identity_error_rad": 0.26549678902054286,
+          "constant_angular_error_rad": 0.2654638921491192,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.8581813374444,
+          "canonical_residual_nrmse": 0.031933920974212104
+        }
+      }
+    },
+    {
+      "uid": "db01c9486b1d4590ab7d31836b1df4d9",
+      "episode_id": "db01c9486b1d4590ab7d31836b1df4d9__soft_free_fall_zero",
+      "family": "soft_body",
+      "panel": "Z",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        2.8230015458691004e-07,
+        4.319829162272312e-09,
+        -1.2625583355483303e-09
+      ],
+      "observed_step_angle_rad": 2.823360272039953e-07,
+      "observed_step_singular_values": [
+        188.73199779393317,
+        66.70246053754616,
+        56.60973453676288
+      ],
+      "observed_step_singular_ratio": 0.3534242275672574,
+      "minimum_target_singular_ratio": 0.3533215965136153,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        -1.237324192077272e-05,
+        -1.8354005608493326e-06,
+        -7.54406198649332e-08
+      ],
+      "impact_angular_velocity_rad_s": [
+        -0.03893763135703543,
+        -0.03358634588794706,
+        0.008239613727355755
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.03453560305189196,
+        -0.00115485875441719,
+        0.007092903226305907
+      ],
+      "initial_to_precontact_cosine": -0.991250816530636,
+      "impact_delta_angular_velocity_rad_s": [
+        -0.03892525811511466,
+        -0.03358451048738621,
+        0.008239689167975621
+      ],
+      "impact_delta_speed_rad_s": 0.052067144549999174,
+      "postimpact_delta_speed_rad_s": 0.035263199028676986,
+      "maximum_angular_step_change_rad_s": 0.1474871044390237,
+      "maximum_canonical_residual_nrmse": 0.09211670243163865,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            -1.4264917803607024e-07,
+            2.237280333846052e-08,
+            -1.368603203285855e-08
+          ],
+          "target_angle_rad": 1.4504012478067e-07,
+          "identity_error_rad": 1.4751396978812924e-07,
+          "constant_angular_error_rad": 4.2618363040909765e-07,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.3534240480802854,
+          "canonical_residual_nrmse": 1.386885639323107e-06
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -0.009063829491070137,
+            -0.007127990467317433,
+            0.0019845938663256924
+          ],
+          "target_angle_rad": 0.011700421614609385,
+          "identity_error_rad": 0.01170042161458065,
+          "constant_angular_error_rad": 0.011702193954400439,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.37376814410639947,
+          "canonical_residual_nrmse": 0.09211670243163865
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            -0.004478479915725548,
+            0.010690703047892477,
+            -0.00110777078604617
+          ],
+          "target_angle_rad": 0.011643670818440033,
+          "identity_error_rad": 0.01164367081837563,
+          "constant_angular_error_rad": 0.011645343480155317,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.353621628899874,
+          "canonical_residual_nrmse": 0.0017420135800081137
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            -0.005020861758552968,
+            0.03245854284712905,
+            -0.002142478093224867
+          ],
+          "target_angle_rad": 0.032914377845211666,
+          "identity_error_rad": 0.032914377845204866,
+          "constant_angular_error_rad": 0.032915540537170454,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.35401767329599976,
+          "canonical_residual_nrmse": 0.006690267002131515
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            -0.010114731045995957,
+            0.0703668242149384,
+            -0.0024779484618657924
+          ],
+          "target_angle_rad": 0.07113324091315212,
+          "identity_error_rad": 0.07113324091314507,
+          "constant_angular_error_rad": 0.07113467476139963,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.3564972370193929,
+          "canonical_residual_nrmse": 0.019628564206681368
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            -0.030919060987128447,
+            0.33494445128443,
+            -0.014793797820413939
+          ],
+          "target_angle_rad": 0.3366936741795203,
+          "identity_error_rad": 0.33669367417951973,
+          "constant_angular_error_rad": 0.3366949472840513,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.3569046791523103,
+          "canonical_residual_nrmse": 0.05008517169175768
+        }
+      }
+    },
+    {
+      "uid": "35f421cf57794d50b34709b48f784089",
+      "episode_id": "35f421cf57794d50b34709b48f784089__x_neg_0p5",
+      "family": "rigid",
+      "panel": "V",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        -1.0713398844307849e-10,
+        4.6246219691231745e-09,
+        2.8830975588775655e-10
+      ],
+      "observed_step_angle_rad": 4.634838569369649e-09,
+      "observed_step_singular_values": [
+        134.86704011607128,
+        129.21642021443324,
+        30.570282617949697
+      ],
+      "observed_step_singular_ratio": 0.9581022917328436,
+      "minimum_target_singular_ratio": 0.9581022794970782,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        7.712348679664427e-10,
+        -2.7896352414725056e-08,
+        3.0995727591079107e-09
+      ],
+      "impact_angular_velocity_rad_s": [
+        -0.5304316839527541,
+        0.9487508603529169,
+        -0.0016367634213433813
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.08520082655569167,
+        0.02639252176583809,
+        -0.002469100547970697
+      ],
+      "initial_to_precontact_cosine": null,
+      "impact_delta_angular_velocity_rad_s": [
+        -0.5304316847239889,
+        0.9487508882492693,
+        -0.0016367665209161403
+      ],
+      "impact_delta_speed_rad_s": 1.0869630624439592,
+      "postimpact_delta_speed_rad_s": 0.0892291663509542,
+      "maximum_angular_step_change_rad_s": 0.9454261809853597,
+      "maximum_canonical_residual_nrmse": 5.6452508027593784e-08,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            1.646326520056406e-10,
+            -7.003372556134843e-09,
+            -7.519702513306591e-10
+          ],
+          "target_angle_rad": 7.045551101866723e-09,
+          "identity_error_rad": 0.0,
+          "constant_angular_error_rad": 0.0,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.9581022906989818,
+          "canonical_residual_nrmse": 2.340195057138979e-08
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -0.0582156147198758,
+            0.08463223457521638,
+            0.000133726782185788
+          ],
+          "target_angle_rad": 0.1027214233218161,
+          "identity_error_rad": 0.10272142332181218,
+          "constant_angular_error_rad": 0.10272139235125277,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.9581022912179968,
+          "canonical_residual_nrmse": 3.1680215691139354e-08
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            0.003379470607294304,
+            0.009327773021600181,
+            4.485709439306397e-05
+          ],
+          "target_angle_rad": 0.009921198681962564,
+          "identity_error_rad": 0.009921198681995622,
+          "constant_angular_error_rad": 0.00992112967698365,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.9581022885056063,
+          "canonical_residual_nrmse": 2.9789041317911608e-08
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            -0.029579673920819526,
+            0.029712502566691678,
+            0.00012990045805735316
+          ],
+          "target_angle_rad": 0.041926206508181414,
+          "identity_error_rad": 0.04192620650819956,
+          "constant_angular_error_rad": 0.04192610589186085,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.9581022898558144,
+          "canonical_residual_nrmse": 3.759092485318546e-08
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            0.0033778022844620824,
+            0.015783688645073957,
+            6.511219251031082e-05
+          ],
+          "target_angle_rad": 0.01614120860143897,
+          "identity_error_rad": 0.016141208601447247,
+          "constant_angular_error_rad": 0.016141028564224055,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.9581022902891156,
+          "canonical_residual_nrmse": 4.367166500229078e-08
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            -0.005962237777752988,
+            0.01924862419920815,
+            8.471092365569439e-05
+          ],
+          "target_angle_rad": 0.020151054285604836,
+          "identity_error_rad": 0.020151054285617805,
+          "constant_angular_error_rad": 0.020150791710575683,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.9581022951651239,
+          "canonical_residual_nrmse": 5.5837415439605126e-08
+        }
+      }
+    },
+    {
+      "uid": "35f421cf57794d50b34709b48f784089",
+      "episode_id": "35f421cf57794d50b34709b48f784089__x_pos_0p5",
+      "family": "rigid",
+      "panel": "V",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        6.1848497705552e-11,
+        -5.458784280892427e-09,
+        -3.689188428927507e-10
+      ],
+      "observed_step_angle_rad": 5.471585892100024e-09,
+      "observed_step_singular_values": [
+        134.86704014559993,
+        129.21642011779528,
+        30.570282613501057
+      ],
+      "observed_step_singular_ratio": 0.9581022908065281,
+      "minimum_target_singular_ratio": 0.9581022783621901,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        -3.344465473531298e-10,
+        3.7406956244272256e-08,
+        5.889544953227975e-11
+      ],
+      "impact_angular_velocity_rad_s": [
+        -0.5304316842310121,
+        0.9487509048588044,
+        -0.0016367411717087242
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.0852008268312089,
+        0.026392528092044232,
+        -0.0024691073645979247
+      ],
+      "initial_to_precontact_cosine": null,
+      "impact_delta_angular_velocity_rad_s": [
+        -0.5304316838965655,
+        0.9487508674518482,
+        -0.0016367412306041737
+      ],
+      "impact_delta_speed_rad_s": 1.0869630438491624,
+      "postimpact_delta_speed_rad_s": 0.08922914821829583,
+      "maximum_angular_step_change_rad_s": 0.9454263723147543,
+      "maximum_canonical_residual_nrmse": 5.4656378961809165e-08,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            -8.621931295969598e-11,
+            8.009347115264811e-09,
+            7.034128889085218e-10
+          ],
+          "target_angle_rad": 8.040638325096499e-09,
+          "identity_error_rad": 0.0,
+          "constant_angular_error_rad": 0.0,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.9581022911543361,
+          "canonical_residual_nrmse": 2.3633402340220666e-08
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -0.05821561493808632,
+            0.08463224419374761,
+            0.00013372745500406607
+          ],
+          "target_angle_rad": 0.10272143137107215,
+          "identity_error_rad": 0.10272143137107262,
+          "constant_angular_error_rad": 0.10272146763529284,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.9581022897761253,
+          "canonical_residual_nrmse": 3.073989477352607e-08
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            0.0033794704528610667,
+            0.009327782374352356,
+            4.485814386280055e-05
+          ],
+          "target_angle_rad": 0.009921207427430911,
+          "identity_error_rad": 0.009921207427397586,
+          "constant_angular_error_rad": 0.009921289233443662,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.9581022880299563,
+          "canonical_residual_nrmse": 2.9161406155940714e-08
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            -0.029579674105988673,
+            0.029712513133777103,
+            0.0001299013238234278
+          ],
+          "target_angle_rad": 0.04192621413024678,
+          "identity_error_rad": 0.041926214130253624,
+          "constant_angular_error_rad": 0.04192633153064539,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.9581022892097254,
+          "canonical_residual_nrmse": 3.639471700940662e-08
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            0.003377803819709216,
+            0.015783696338646833,
+            6.511217649713154e-05
+          ],
+          "target_angle_rad": 0.016141216445812994,
+          "identity_error_rad": 0.01614121644579785,
+          "constant_angular_error_rad": 0.016141429502688064,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.9581022890320355,
+          "canonical_residual_nrmse": 4.314382704408366e-08
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            -0.0060288666778944315,
+            0.019300735568012973,
+            8.472382978547305e-05
+          ],
+          "target_angle_rad": 0.02022060347797564,
+          "identity_error_rad": 0.020220603477986515,
+          "constant_angular_error_rad": 0.020220912074259658,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.9581022916034365,
+          "canonical_residual_nrmse": 5.3093512130758735e-08
+        }
+      }
+    },
+    {
+      "uid": "35f421cf57794d50b34709b48f784089",
+      "episode_id": "35f421cf57794d50b34709b48f784089__y_pos_0p5",
+      "family": "rigid",
+      "panel": "V",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        4.7331612259163025e-09,
+        -4.976339616033422e-10,
+        -8.909678296374212e-11
+      ],
+      "observed_step_angle_rad": 4.760083296224242e-09,
+      "observed_step_singular_values": [
+        134.8670401096042,
+        129.21642028936554,
+        30.570282608600365
+      ],
+      "observed_step_singular_ratio": 0.9581022923343873,
+      "minimum_target_singular_ratio": 0.9581022804669048,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        -2.843045732281618e-08,
+        4.6614924068627694e-09,
+        1.0515370252830248e-09
+      ],
+      "impact_angular_velocity_rad_s": [
+        -0.5304317095362603,
+        0.9487508860745841,
+        -0.0016367596350687099
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.08520083030007973,
+        0.02639252261289407,
+        -0.002469096013076762
+      ],
+      "initial_to_precontact_cosine": null,
+      "impact_delta_angular_velocity_rad_s": [
+        -0.530431681105803,
+        0.9487508814130917,
+        -0.001636760686605735
+      ],
+      "impact_delta_speed_rad_s": 1.0869630547025928,
+      "postimpact_delta_speed_rad_s": 0.0892291324812485,
+      "maximum_angular_step_change_rad_s": 0.9454263063183798,
+      "maximum_canonical_residual_nrmse": 5.648220812245459e-08,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            -6.909961401085044e-09,
+            5.430552317204118e-10,
+            4.366037582346241e-12
+          ],
+          "target_angle_rad": 6.931269336237646e-09,
+          "identity_error_rad": 0.0,
+          "constant_angular_error_rad": 0.0,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.9581022927351043,
+          "canonical_residual_nrmse": 2.3497214197360418e-08
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -0.058215619762075135,
+            0.0846322394520296,
+            0.000133726733563556
+          ],
+          "target_angle_rad": 0.10272143019734227,
+          "identity_error_rad": 0.10272143019734069,
+          "constant_angular_error_rad": 0.10272145493778877,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.9581022932602208,
+          "canonical_residual_nrmse": 3.157093649938729e-08
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            0.003379465360621911,
+            0.009327777827385116,
+            4.4858308929620326e-05
+          ],
+          "target_angle_rad": 0.009921201418607566,
+          "identity_error_rad": 0.009921201418588294,
+          "constant_angular_error_rad": 0.009921183115058999,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.9581022911171493,
+          "canonical_residual_nrmse": 3.0466026126615714e-08
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            -0.029579678196593674,
+            0.02971250774700401,
+            0.00012990103714128481
+          ],
+          "target_angle_rad": 0.04192621319782247,
+          "identity_error_rad": 0.04192621319782263,
+          "constant_angular_error_rad": 0.04192632396602825,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.9581022907841374,
+          "canonical_residual_nrmse": 3.663270036608734e-08
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            0.0033778006135735303,
+            0.015783690982566125,
+            6.511265277491971e-05
+          ],
+          "target_angle_rad": 0.016141210539353867,
+          "identity_error_rad": 0.016141210539351313,
+          "constant_angular_error_rad": 0.01614119039978612,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.9581022922354258,
+          "canonical_residual_nrmse": 4.306969871198243e-08
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            -0.005902883304243459,
+            0.01923726605866126,
+            8.453087263581846e-05
+          ],
+          "target_angle_rad": 0.020122713092017817,
+          "identity_error_rad": 0.020122713092032566,
+          "constant_angular_error_rad": 0.020122823102557464,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.9581022917038078,
+          "canonical_residual_nrmse": 5.648220812245459e-08
+        }
+      }
+    },
+    {
+      "uid": "57113d79a15b409986182e304f303520",
+      "episode_id": "57113d79a15b409986182e304f303520__x_neg_0p5",
+      "family": "rigid",
+      "panel": "V",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        1.0040517553796851e-09,
+        -5.991814723859056e-10,
+        -1.0958198421236735e-09
+      ],
+      "observed_step_angle_rad": 1.6024854104557463e-09,
+      "observed_step_singular_values": [
+        164.25968057239245,
+        26.07140129680752,
+        22.937941785853518
+      ],
+      "observed_step_singular_ratio": 0.15872063799197114,
+      "minimum_target_singular_ratio": 0.15872063335804973,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        -3.136028070979408e-09,
+        -4.616244202101365e-09,
+        2.244163704685527e-08
+      ],
+      "impact_angular_velocity_rad_s": [
+        -0.8181656357114049,
+        0.25119742772639275,
+        -0.0008624331793011883
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.1387224785618672,
+        0.07248202864091363,
+        -0.0006146021291431465
+      ],
+      "initial_to_precontact_cosine": null,
+      "impact_delta_angular_velocity_rad_s": [
+        -0.8181656325753768,
+        0.251197432342637,
+        -0.0008624556209382351
+      ],
+      "impact_delta_speed_rad_s": 0.8558597409463178,
+      "postimpact_delta_speed_rad_s": 0.15651820372316852,
+      "maximum_angular_step_change_rad_s": 0.62055364493675,
+      "maximum_canonical_residual_nrmse": 4.782126521733749e-08,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            -1.8691187058572864e-09,
+            2.0134894026151183e-09,
+            7.350053276285423e-10
+          ],
+          "target_angle_rad": 2.8439369090525454e-09,
+          "identity_error_rad": 0.0,
+          "constant_angular_error_rad": 0.0,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.15872063686225674,
+          "canonical_residual_nrmse": 2.1498423699671112e-08
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -0.08637193421441713,
+            0.034443661153536434,
+            -0.0005679265086351655
+          ],
+          "target_angle_rad": 0.09298816781783824,
+          "identity_error_rad": 0.0929881678178369,
+          "constant_angular_error_rad": 0.09298817700073223,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.15872063335804973,
+          "canonical_residual_nrmse": 2.3942979283172608e-08
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            -0.03191908246765011,
+            0.006566776980442215,
+            -3.181747688324821e-05
+          ],
+          "target_angle_rad": 0.03258759576647761,
+          "identity_error_rad": 0.03258759576647025,
+          "constant_angular_error_rad": 0.03258761341650125,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.15872064069191472,
+          "canonical_residual_nrmse": 2.879422403125949e-08
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            -0.06829788854810892,
+            0.023552590551307383,
+            -0.0002797806020246491
+          ],
+          "target_angle_rad": 0.07224544538580069,
+          "identity_error_rad": 0.07224544538579525,
+          "constant_angular_error_rad": 0.07224547959431206,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.1587206378287137,
+          "canonical_residual_nrmse": 2.9441127454796837e-08
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            -0.061909233134214314,
+            0.02017360812248954,
+            -0.00020249306136314722
+          ],
+          "target_angle_rad": 0.06511350562967852,
+          "identity_error_rad": 0.0651135056296908,
+          "constant_angular_error_rad": 0.0651135511046527,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.15872063863248145,
+          "canonical_residual_nrmse": 3.799508152269095e-08
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            -0.01350493506598943,
+            0.00204365636939121,
+            3.8450300687514756e-05
+          ],
+          "target_angle_rad": 0.013658743753302028,
+          "identity_error_rad": 0.013658743753288436,
+          "constant_angular_error_rad": 0.01365880779686274,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.1587206373460583,
+          "canonical_residual_nrmse": 4.748549141631196e-08
+        }
+      }
+    },
+    {
+      "uid": "57113d79a15b409986182e304f303520",
+      "episode_id": "57113d79a15b409986182e304f303520__x_pos_0p5",
+      "family": "rigid",
+      "panel": "V",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        -2.0119182360201175e-09,
+        3.458520840369783e-09,
+        6.128979747226379e-10
+      ],
+      "observed_step_angle_rad": 4.047817352490293e-09,
+      "observed_step_singular_values": [
+        164.25967955736422,
+        26.071401305857627,
+        22.937941592747592
+      ],
+      "observed_step_singular_ratio": 0.1587206390278677,
+      "minimum_target_singular_ratio": 0.15872063513774437,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        1.1081257426973729e-08,
+        -2.315761833982297e-08,
+        7.538132657053799e-09
+      ],
+      "impact_angular_velocity_rad_s": [
+        -0.8181637179813668,
+        0.25120169941845955,
+        -0.0008624930804301739
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.14063258662269365,
+        0.07363236442911693,
+        -0.0006292935396974785
+      ],
+      "initial_to_precontact_cosine": null,
+      "impact_delta_angular_velocity_rad_s": [
+        -0.8181637290626242,
+        0.25120172257607787,
+        -0.0008625006185628309
+      ],
+      "impact_delta_speed_rad_s": 0.8558591805233878,
+      "postimpact_delta_speed_rad_s": 0.1587439827474765,
+      "maximum_angular_step_change_rad_s": 0.6205535508996943,
+      "maximum_canonical_residual_nrmse": 4.3463051983202265e-08,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            2.5152215524546345e-09,
+            -3.9293850888714945e-09,
+            -1.2334408905293313e-09
+          ],
+          "target_angle_rad": 4.8257417113856945e-09,
+          "identity_error_rad": 0.0,
+          "constant_angular_error_rad": 0.0,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.15872063760702596,
+          "canonical_residual_nrmse": 2.1038981332084115e-08
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -0.08655142975559754,
+            0.03455180374486562,
+            -0.0005708131606976178
+          ],
+          "target_angle_rad": 0.09319497283880859,
+          "identity_error_rad": 0.09319497283881067,
+          "constant_angular_error_rad": 0.09319494766297289,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.15872063871771847,
+          "canonical_residual_nrmse": 2.2997236876101473e-08
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            -0.03137253149688722,
+            0.006430876868754331,
+            -3.088878230915057e-05
+          ],
+          "target_angle_rad": 0.03202487882789149,
+          "identity_error_rad": 0.03202487882787883,
+          "constant_angular_error_rad": 0.03202483619038186,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.158720637176012,
+          "canonical_residual_nrmse": 2.2740360049124198e-08
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            -0.06724421500061802,
+            0.02291779621199208,
+            -0.00026676075575014275
+          ],
+          "target_angle_rad": 0.07104281100550955,
+          "identity_error_rad": 0.07104281100550605,
+          "constant_angular_error_rad": 0.07104272047364356,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.15872064032852137,
+          "canonical_residual_nrmse": 2.6392332856178646e-08
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            -0.06139424546893804,
+            0.0199320936933542,
+            -0.00019830377155915125
+          ],
+          "target_angle_rad": 0.06454905932766708,
+          "identity_error_rad": 0.06454905932767567,
+          "constant_angular_error_rad": 0.06454894014138877,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.15872064130834762,
+          "canonical_residual_nrmse": 3.3743058714780735e-08
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            -0.012827831621477563,
+            0.001867140088285799,
+            3.8296255531385216e-05
+          ],
+          "target_angle_rad": 0.012963060704226119,
+          "identity_error_rad": 0.012963060704233302,
+          "constant_angular_error_rad": 0.012962913743066195,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.1587206369471231,
+          "canonical_residual_nrmse": 4.2989848667917144e-08
+        }
+      }
+    },
+    {
+      "uid": "57113d79a15b409986182e304f303520",
+      "episode_id": "57113d79a15b409986182e304f303520__y_pos_0p5",
+      "family": "rigid",
+      "panel": "V",
+      "dt_s": 0.03333333507180214,
+      "contact_onset_index_from_x1": 4,
+      "observed_step_rotation_vector_rad": [
+        -1.8864589641919694e-09,
+        1.8479638727394648e-09,
+        2.2316952738886024e-09
+      ],
+      "observed_step_angle_rad": 3.457479095240809e-09,
+      "observed_step_singular_values": [
+        164.2596802733475,
+        26.071401451822084,
+        22.9379417165408
+      ],
+      "observed_step_singular_ratio": 0.1587206392246484,
+      "minimum_target_singular_ratio": 0.15872063535946382,
+      "invalid_target_frames_at_1e-3": 0,
+      "precontact_angular_velocity_rad_s": [
+        1.1357092974529587e-08,
+        -1.54813578211816e-08,
+        -1.6125141622531327e-08
+      ],
+      "impact_angular_velocity_rad_s": [
+        -0.8181654286509176,
+        0.2511986790135424,
+        -0.0008624410216369846
+      ],
+      "postimpact_angular_velocity_rad_s": [
+        -0.1387758807803502,
+        0.0725160409378138,
+        -0.0006148995557463562
+      ],
+      "initial_to_precontact_cosine": null,
+      "impact_delta_angular_velocity_rad_s": [
+        -0.8181654400080105,
+        0.25119869449490023,
+        -0.000862424896495362
+      ],
+      "impact_delta_speed_rad_s": 0.855859927275571,
+      "postimpact_delta_speed_rad_s": 0.1565813039885828,
+      "maximum_angular_step_change_rad_s": 0.6205535617227206,
+      "maximum_canonical_residual_nrmse": 4.823136598086186e-08,
+      "horizons": {
+        "h1": {
+          "target_rotation_vector_rad": [
+            2.1709121663587235e-09,
+            -1.4136376761247416e-09,
+            -2.92060132517483e-09
+          ],
+          "target_angle_rad": 3.903990678013545e-09,
+          "identity_error_rad": 2.1073424255447017e-08,
+          "constant_angular_error_rad": 2.1073424255447017e-08,
+          "constant_angular_improves": false,
+          "singular_ratio": 0.15872063777776754,
+          "canonical_residual_nrmse": 1.896316874849248e-08
+        },
+        "h8": {
+          "target_rotation_vector_rad": [
+            -0.08637636097910366,
+            0.034446322527548374,
+            -0.0005679840362574985
+          ],
+          "target_angle_rad": 0.09299326576440764,
+          "identity_error_rad": 0.09299326576441401,
+          "constant_angular_error_rad": 0.09299324637949069,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.1587206379464994,
+          "canonical_residual_nrmse": 1.9893995155942823e-08
+        },
+        "h16": {
+          "target_rotation_vector_rad": [
+            -0.03192686243028862,
+            0.006568712426801421,
+            -3.184595546855761e-05
+          ],
+          "target_angle_rad": 0.032595606172511504,
+          "identity_error_rad": 0.03259560617248507,
+          "constant_angular_error_rad": 0.03259557068484287,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.15872063916283527,
+          "canonical_residual_nrmse": 2.3480681037889363e-08
+        },
+        "h30": {
+          "target_rotation_vector_rad": [
+            -0.06829636081864382,
+            0.02355168884450743,
+            -0.00027976193439255807
+          ],
+          "target_angle_rad": 0.07224370709784221,
+          "identity_error_rad": 0.07224370709784368,
+          "constant_angular_error_rad": 0.0722436357823516,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.15872064164869187,
+          "canonical_residual_nrmse": 2.9463952927907378e-08
+        },
+        "h40": {
+          "target_rotation_vector_rad": [
+            -0.06233591651660572,
+            0.020373412571973733,
+            -0.00020646227510989155
+          ],
+          "target_angle_rad": 0.06558113337282406,
+          "identity_error_rad": 0.06558113337282287,
+          "constant_angular_error_rad": 0.06558103896603934,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.15872063959456859,
+          "canonical_residual_nrmse": 3.227496835504398e-08
+        },
+        "h59": {
+          "target_rotation_vector_rad": [
+            -0.01516474080352539,
+            0.0024787867793612064,
+            3.6748662674000215e-05
+          ],
+          "target_angle_rad": 0.015366037159913812,
+          "identity_error_rad": 0.015366037159923405,
+          "constant_angular_error_rad": 0.01536590941456334,
+          "constant_angular_improves": true,
+          "singular_ratio": 0.15872064084068355,
+          "canonical_residual_nrmse": 4.823136598086186e-08
+        }
+      }
+    }
+  ]
+}
