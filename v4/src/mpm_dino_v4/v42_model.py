@@ -341,17 +341,23 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
                     protected.shape[0], self.frames,
                     self.oracle_condition_dim,
                 )
-            expected = (
+            global_expected = (
                 protected.shape[0], self.frames, self.oracle_condition_dim,
             )
-            if tuple(oracle_condition.shape) != expected:
+            point_expected = (
+                protected.shape[0], self.frames, protected.shape[2],
+                self.oracle_condition_dim,
+            )
+            if tuple(oracle_condition.shape) not in {global_expected, point_expected}:
                 raise ValueError(
-                    "oracle_condition must have shape "
-                    f"{expected}, got {tuple(oracle_condition.shape)}"
+                    "oracle_condition must have global or pointwise shape "
+                    f"{global_expected} / {point_expected}, got "
+                    f"{tuple(oracle_condition.shape)}"
                 )
-            protected = protected + self.oracle_adapter_projection(
-                oracle_condition
-            )[:, :, None]
+            projected = self.oracle_adapter_projection(oracle_condition)
+            if projected.ndim == 3:
+                projected = projected[:, :, None]
+            protected = protected + projected
         dino = inputs["dino"]
         if self.local_mode in {"zero", "geometry"}:
             dino = torch.zeros_like(dino)
@@ -370,20 +376,26 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
                         local_hidden.shape[0], self.frames,
                         self.oracle_condition_dim,
                     )
-                expected = (
+                global_expected = (
                     local_hidden.shape[0], self.frames,
                     self.oracle_condition_dim,
                 )
-                if tuple(oracle_condition.shape) != expected:
+                point_expected = (
+                    local_hidden.shape[0], self.frames, local_hidden.shape[2],
+                    self.oracle_condition_dim,
+                )
+                if tuple(oracle_condition.shape) not in {global_expected, point_expected}:
                     raise ValueError(
-                        "oracle_condition must have shape "
-                        f"{expected}, got {tuple(oracle_condition.shape)}"
+                        "oracle_condition must have global or pointwise shape "
+                        f"{global_expected} / {point_expected}, got "
+                        f"{tuple(oracle_condition.shape)}"
+                    )
+                if oracle_condition.ndim == 3:
+                    oracle_condition = oracle_condition[:, :, None].expand(
+                        -1, -1, local_hidden.shape[2], -1,
                     )
                 conditioned = torch.cat((
-                    local_hidden,
-                    oracle_condition[:, :, None].expand(
-                        -1, -1, local_hidden.shape[2], -1,
-                    ),
+                    local_hidden, oracle_condition,
                 ), dim=-1)
                 raw = self.oracle_canonical_head(conditioned)
             else:
