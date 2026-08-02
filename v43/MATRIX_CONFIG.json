@@ -1,0 +1,37 @@
+{
+  "version": "v43_deformation_retrieval_matrix_v1_frozen",
+  "status": "design_frozen_full_run_not_started",
+  "test_data_used": false,
+  "population": "soft_body_only",
+  "seeds": [42, 456],
+  "top_k": 3,
+  "retrieval_arms": [
+    "zero_memory",
+    "geometry",
+    "aligned_dino",
+    "scene_shuffled",
+    "point_shuffled"
+  ],
+  "report_only_ceiling": "oracle_best_training_memory_noncausal",
+  "base_architecture": "v42_adapter_full_oracle_condition",
+  "protected_paths": ["physical_trunk", "com_head", "rotation_branch"],
+  "objective": "event_frame_amplitude_normalized_canonical_mse_v1",
+  "contact": "future_ground_truth_floor_contact_oracle",
+  "time": "ground_truth_stage_and_normalized_event_time_oracle",
+  "curvature": "retained_only_to_match_v42_champion_base",
+  "champion": {
+    "path": "v42/checkpoints/v42_adapter_full_seed42_best.pt",
+    "sha256": "85dd4bb3024268ec1b2dedbf1a6ed09d1175628a8f1cdb995060fcf5430c4dfb"
+  },
+  "fixed_weight_ablations": [
+    "zero_query_dino",
+    "zero_memory_dino",
+    "zero_memory",
+    "point_shuffled_correspondence"
+  ],
+  "selection_split": "validation",
+  "bank_split": "train",
+  "training_query_rule": "leave_one_uid_out",
+  "rotation_retrieval": false,
+  "large_run_authorized": false
+}
