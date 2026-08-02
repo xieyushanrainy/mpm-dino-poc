@@ -6,12 +6,16 @@ from mpm_dino_v2.deformation import edge_validity, gather_neighbours
 
 from .model import masked_mean
 from .v42_gate2 import train_v42_gate2
-from .v42_oracle import LOSS_CONTRACT, event_normalized_canonical_mse
+from .v42_oracle import (
+    LOSS_CONTRACT, TEMPORAL_DIM, event_normalized_canonical_mse,
+    temporal_features,
+)
 
 
 CONTACT_DIM = 3
 CURVATURE_DIM = 4
 POINT_CONDITION_DIM = CONTACT_DIM + CURVATURE_DIM
+DIRECT_CONDITION_DIM = POINT_CONDITION_DIM + TEMPORAL_DIM
 VARIANTS = {
     "zero_control": (False, False),
     "oracle_contact": (True, False),
@@ -92,6 +96,28 @@ class ContactCurvatureConditionBuilder:
         return result.detach()
 
 
+class DirectProbeConditionBuilder:
+    """Matched pointwise contact/curvature/time input for decoder probes."""
+
+    def __init__(self, enabled=True):
+        self.enabled = bool(enabled)
+
+    def __call__(self, batch, stages):
+        batch_size, frames, points = batch["target"].shape[:3]
+        result = batch["target"].new_zeros(
+            batch_size, frames, points, DIRECT_CONDITION_DIM,
+        )
+        if not self.enabled:
+            return result
+        result[..., :CONTACT_DIM] = oracle_floor_contact_features(batch)
+        result[..., CONTACT_DIM:POINT_CONDITION_DIM] = (
+            curvature_features(batch)[:, None]
+        )
+        temporal = temporal_features(stages, frames)
+        result[..., POINT_CONDITION_DIM:] = temporal[:, :, None]
+        return result.detach()
+
+
 def train_contact_curvature_variant(
     dataset_root, manifest, checkpoint, output, seed, variant, **kwargs,
 ):
@@ -109,5 +135,34 @@ def train_contact_curvature_variant(
         dataset_families=("soft_body",), selection_mode="optimized",
         experiment_name="v42_contact_curvature_" + variant,
         model_contract_version="contact_curvature_point_adapter_v1",
+        **kwargs,
+    )
+
+
+DIRECT_VARIANTS = {
+    "adapter_full": ("adapter", True),
+    "direct_zero": ("direct", False),
+    "direct_full": ("direct", True),
+}
+
+
+def train_direct_decoder_probe(
+    dataset_root, manifest, checkpoint, output, seed, variant, **kwargs,
+):
+    if variant not in DIRECT_VARIANTS:
+        raise ValueError(f"unknown direct-decoder variant: {variant}")
+    injection, enabled = DIRECT_VARIANTS[variant]
+    return train_v42_gate2(
+        dataset_root, manifest, checkpoint, output, seed,
+        loss_options=LOSS_CONTRACT, stage_weight_mode="total_mass",
+        oracle_condition_dim=DIRECT_CONDITION_DIM,
+        oracle_injection=injection,
+        condition_builder=DirectProbeConditionBuilder(enabled),
+        condition_name=variant, exploratory_control=True,
+        objective_builder=event_normalized_canonical_mse,
+        objective_name="event_frame_amplitude_normalized_canonical_mse_v1",
+        dataset_families=("soft_body",), selection_mode="optimized",
+        experiment_name="v42_direct_decoder_probe_" + variant,
+        model_contract_version="direct_point_decoder_probe_v1",
         **kwargs,
     )

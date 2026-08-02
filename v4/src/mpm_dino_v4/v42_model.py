@@ -58,8 +58,10 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         self.oracle_condition_dim = int(oracle_condition_dim)
         if self.oracle_condition_dim < 0:
             raise ValueError("oracle_condition_dim must be non-negative")
-        if oracle_injection not in {"decoder", "adapter"}:
-            raise ValueError("oracle_injection must be decoder or adapter")
+        if oracle_injection not in {"decoder", "adapter", "direct"}:
+            raise ValueError(
+                "oracle_injection must be decoder, adapter, or direct"
+            )
         self.oracle_injection = oracle_injection
         self.local_trunk_alpha = float(local_trunk_alpha)
         if rotation_parameterization not in {"6d", "axis_angle"}:
@@ -142,6 +144,18 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
                 nn.Linear(hidden_dim, hidden_dim, bias=False),
             )
             nn.init.zeros_(self.oracle_adapter_projection[1].bias)
+        if self.oracle_condition_dim and self.oracle_injection == "direct":
+            # Bypass region retrieval/attention. Explicit normalized reference
+            # coordinates prevent this diagnostic from depending on whether
+            # the frozen physical trunk preserved fine point geometry.
+            self.oracle_direct_head = nn.Sequential(
+                nn.LayerNorm(hidden_dim + self.oracle_condition_dim + 3),
+                nn.Linear(
+                    hidden_dim + self.oracle_condition_dim + 3, hidden_dim,
+                ),
+                nn.SiLU(), nn.Linear(hidden_dim, hidden_dim), nn.SiLU(),
+                nn.Linear(hidden_dim, 3),
+            )
         nn.init.zeros_(self.v42_com_head[-1].weight)
         nn.init.zeros_(self.v42_com_head[-1].bias)
         nn.init.zeros_(self.rotation_head[-1].weight)
@@ -163,6 +177,9 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
         if self.oracle_condition_dim and self.oracle_injection == "decoder":
             nn.init.zeros_(self.oracle_canonical_head[-1].weight)
             nn.init.zeros_(self.oracle_canonical_head[-1].bias)
+        if self.oracle_condition_dim and self.oracle_injection == "direct":
+            nn.init.normal_(self.oracle_direct_head[-1].weight, std=1e-3)
+            nn.init.zeros_(self.oracle_direct_head[-1].bias)
 
     def _physical_features(self, **inputs):
         captured = {}
@@ -358,17 +375,45 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
             if projected.ndim == 3:
                 projected = projected[:, :, None]
             protected = protected + projected
-        dino = inputs["dino"]
-        if self.local_mode in {"zero", "geometry"}:
-            dino = torch.zeros_like(dino)
-        visual = self.dino_projection(dino, inputs["dino_valid"])
-        regions = self.region_encoder(
-            visual, inputs["dino_valid"], inputs["reference"], input_mask,
-            inputs["neighbour_mask"], inputs["rest_edge_lengths"],
-        )
-        local_hidden = self.region_adapter(protected, regions, input_mask)
+        if self.oracle_condition_dim and self.oracle_injection == "direct":
+            expected = (
+                protected.shape[0], self.frames, protected.shape[2],
+                self.oracle_condition_dim,
+            )
+            if oracle_condition is None:
+                oracle_condition = protected.new_zeros(expected)
+            if tuple(oracle_condition.shape) != expected:
+                raise ValueError(
+                    "direct oracle_condition must have pointwise shape "
+                    f"{expected}, got {tuple(oracle_condition.shape)}"
+                )
+            point_geometry = (reference_shape / radius[:, None, None])
+            point_geometry = point_geometry[:, None].expand(
+                -1, self.frames, -1, -1,
+            )
+            local_hidden = protected
+            raw = self.oracle_direct_head(torch.cat((
+                protected, point_geometry, oracle_condition,
+            ), dim=-1))
+        else:
+            dino = inputs["dino"]
+            if self.local_mode in {"zero", "geometry"}:
+                dino = torch.zeros_like(dino)
+            visual = self.dino_projection(dino, inputs["dino_valid"])
+            regions = self.region_encoder(
+                visual, inputs["dino_valid"], inputs["reference"], input_mask,
+                inputs["neighbour_mask"], inputs["rest_edge_lengths"],
+            )
+            local_hidden = self.region_adapter(protected, regions, input_mask)
         if self.local_mode == "zero":
             displacement = torch.zeros_like(legacy.residual_local)
+        elif self.oracle_condition_dim and self.oracle_injection == "direct":
+            raw = raw * input_mask[:, None, :, None]
+            displacement = (
+                raw - masked_mean(
+                    raw, input_mask[:, None].expand(-1, self.frames, -1), 2
+                )[:, :, None]
+            ) * input_mask[:, None, :, None]
         else:
             if self.oracle_condition_dim and self.oracle_injection == "decoder":
                 if oracle_condition is None:

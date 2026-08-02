@@ -28,7 +28,7 @@ from .v42_stages import (
 LOCAL_PREFIXES = (
     "dino_projection.", "region_encoder.", "region_adapter.",
     "canonical_head.", "oracle_canonical_head.",
-    "oracle_adapter_projection.",
+    "oracle_adapter_projection.", "oracle_direct_head.",
 )
 HORIZONS = (1, 8, 16, 30, 40, 59)
 TIMING_FLOOR_NRMSE = 1e-4
@@ -72,6 +72,8 @@ def set_gate2_mode(model, training):
             model.oracle_canonical_head.train()
         if hasattr(model, "oracle_adapter_projection"):
             model.oracle_adapter_projection.train()
+        if hasattr(model, "oracle_direct_head"):
+            model.oracle_direct_head.train()
 
 
 def load_gate1e_source(
@@ -112,6 +114,7 @@ def load_gate1e_source(
             name for name in model.state_dict()
             if name.startswith((
                 "oracle_canonical_head.", "oracle_adapter_projection.",
+                "oracle_direct_head.",
             ))
         }
         if set(incompatible.missing_keys) != expected_missing or (

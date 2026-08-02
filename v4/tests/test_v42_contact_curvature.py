@@ -1,9 +1,11 @@
 import torch
 
 from mpm_dino_v4.v42_contact_curvature import (
-    CONTACT_DIM, POINT_CONDITION_DIM, ContactCurvatureConditionBuilder,
+    CONTACT_DIM, DIRECT_CONDITION_DIM, POINT_CONDITION_DIM,
+    ContactCurvatureConditionBuilder, DirectProbeConditionBuilder,
     curvature_features, oracle_floor_contact_features,
 )
+from mpm_dino_v4.v42_stages import derive_impact_stages
 from mpm_dino_v4.v42_model import V42RotationAwareSurrogate
 
 from test_v42 import inputs
@@ -59,3 +61,36 @@ def test_adapter_accepts_pointwise_condition_and_backpropagates():
     gradient = model.oracle_adapter_projection[1].weight.grad
     assert gradient is not None
     assert torch.linalg.vector_norm(gradient) > 0
+
+
+def test_direct_probe_condition_has_matched_zero_and_full_contract():
+    batch = feature_batch()
+    stages = derive_impact_stages(
+        batch["x1"], batch["target"], batch["input_mask"],
+        batch["target_mask"], batch["neighbour_indices"],
+        batch["neighbour_mask"], batch["rest_edge_lengths"], batch["dt"],
+        batch["gravity"], batch["floor_z"],
+    )
+    zero = DirectProbeConditionBuilder(False)(batch, stages)
+    full = DirectProbeConditionBuilder(True)(batch, stages)
+    assert zero.shape == full.shape == (1, 7, 16, DIRECT_CONDITION_DIM)
+    assert torch.count_nonzero(zero) == 0
+    assert torch.count_nonzero(full) > 0
+
+
+def test_direct_decoder_bypasses_adapter_and_receives_gradient():
+    data = inputs(frames=7)
+    model = V42RotationAwareSurrogate(
+        hidden_dim=16, blocks=1, heads=4, dropout=0.0, frames=7,
+        gradient_checkpointing=False,
+        oracle_condition_dim=DIRECT_CONDITION_DIM,
+        oracle_injection="direct",
+    )
+    condition = torch.randn(1, 7, 16, DIRECT_CONDITION_DIM)
+    prediction = model(**data, oracle_condition=condition)
+    assert prediction.canonical_displacement.shape == (1, 7, 16, 3)
+    prediction.canonical_displacement.square().sum().backward()
+    assert model.oracle_direct_head[1].weight.grad is not None
+    assert all(
+        parameter.grad is None for parameter in model.region_adapter.parameters()
+    )
