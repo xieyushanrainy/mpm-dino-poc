@@ -5,6 +5,7 @@
   "population": "soft_body_only",
   "seeds": [42, 456],
   "top_k": 3,
+  "memory_tokens_per_source": 32,
   "retrieval_arms": [
     "zero_memory",
     "geometry",

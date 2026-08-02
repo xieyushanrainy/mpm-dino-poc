@@ -42,6 +42,10 @@ For each candidate, PCA proper-sign alignment is selected by geometry Chamfer.
 Query points are matched to valid source points by nearest normalized aligned
 coordinate.  Real-DINO ranking uses mean cosine distance on those matched valid
 point pairs; geometry ranking uses Chamfer.  `k=3` is fixed before validation.
+After alignment, each retrieved object is deterministically reduced to 32
+evenly spaced valid memory tokens.  Full 2,048-by-2,048 cross-attention over 59
+frames is not computationally practical; this fixed reduction is identical in
+all arms and is not tuned on validation.
 
 ## Query, memory, and residual interface
 
@@ -95,4 +99,3 @@ plus degradation under fixed-weight DINO/memory ablation and UID-balanced gains.
 3. Run A--E on validation only after approval.
 4. Consider causal collider-relative contact only after retrieval value is
    established.  Rotation retrieval remains a separate later experiment.
-

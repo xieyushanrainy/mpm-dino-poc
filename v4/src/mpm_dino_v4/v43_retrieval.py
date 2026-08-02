@@ -184,7 +184,8 @@ def retrieve(bank: RetrievalBank, query_uid: str, query_split: str,
 
 def materialize_aligned(query_coordinates: Tensor, query_valid: Tensor,
                         entries: list[MemoryEntry], mode: str,
-                        shuffle_seed: int = 0) -> tuple[Tensor, Tensor]:
+                        shuffle_seed: int = 0,
+                        max_tokens: int | None = None) -> tuple[Tensor, Tensor]:
     """Return [K,N,F] matched tokens and [K,N] validity."""
     rows, masks = [], []
     for rank, entry in enumerate(entries):
@@ -206,6 +207,17 @@ def materialize_aligned(query_coordinates: Tensor, query_valid: Tensor,
             dino_valid = torch.zeros_like(dino_valid)
         token = torch.cat((coordinates, dino, dino_valid[:, None].to(dino.dtype),
                            contact, deformation), dim=-1)
+        if max_tokens is not None and len(token) > max_tokens:
+            eligible = torch.nonzero(valid, as_tuple=False).flatten()
+            if not len(eligible):
+                chosen = torch.zeros(max_tokens, dtype=torch.long,
+                                     device=token.device)
+            else:
+                positions = torch.linspace(
+                    0, len(eligible) - 1, max_tokens, device=token.device
+                ).round().long()
+                chosen = eligible[positions]
+            token, valid = token[chosen], valid[chosen]
         rows.append(token)
         masks.append(valid)
     values, mask = torch.stack(rows), torch.stack(masks)
