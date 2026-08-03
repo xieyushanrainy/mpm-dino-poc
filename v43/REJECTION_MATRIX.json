@@ -1,0 +1,26 @@
+{
+  "version": "v43_compact_bad_neighbour_rejection_v1_frozen",
+  "population": "soft_body_only",
+  "seeds": [42, 123, 456],
+  "arms": [
+    "compact_baseline",
+    "compatibility_gate",
+    "compatibility_gate_wrong_training"
+  ],
+  "retrieval": "aligned_dino_top3",
+  "top_k": 3,
+  "memory_tokens_per_source": 32,
+  "wrong_training": {
+    "source": "deterministic_scene_shuffled_training_UIDs",
+    "base_safety_weight": 0.5,
+    "wrong_gate_weight": 0.05
+  },
+  "champion": {
+    "path": "v42/checkpoints/v42_adapter_full_seed42_best.pt",
+    "sha256": "85dd4bb3024268ec1b2dedbf1a6ed09d1175628a8f1cdb995060fcf5430c4dfb",
+    "frozen": true
+  },
+  "selection": "real_memory_validation_event_objective",
+  "test_data_used": false,
+  "large_run_authorized": false
+}

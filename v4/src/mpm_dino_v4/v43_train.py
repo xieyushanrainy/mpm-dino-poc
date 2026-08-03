@@ -19,6 +19,7 @@ from .v42_model import V42RotationAwareSurrogate
 from .v42_oracle import EVENT_STAGES, event_normalized_canonical_mse
 from .v42_oracle import temporal_features
 from .v43_field_attention import FieldAttentionModel, FieldBank, FieldEntry
+from .v43_rejection import RejectingMechanicalMemory
 from .v43_retrieval import (
     AttendedMechanicalMemory, MemoryEntry, RetrievalBank,
     materialize_aligned, retrieve,
@@ -126,7 +127,7 @@ class V43RetrievalModel(nn.Module):
 
     def _memory(self, batch, stages, coordinates, query_dino, query_dino_valid,
                 *, memory_dino_ablate=False, memory_ablate=False,
-                correspondence_ablate=False):
+                correspondence_ablate=False, retrieval_mode=None):
         frames, n = batch["target"].shape[1:3]
         values = coordinates.new_zeros(frames, self.top_k, self.memory_tokens, MEMORY_DIM)
         masks = torch.zeros(frames, self.top_k, self.memory_tokens,
@@ -137,14 +138,15 @@ class V43RetrievalModel(nn.Module):
             if stage not in [int(s) for s in EVENT_STAGES]:
                 continue
             if stage not in cache:
+                mode = retrieval_mode or self.arm
                 selected = retrieve(
                     self.bank, batch["uid"][0], "train" if batch.get("split") == "train" else "validation",
                     coordinates[0].detach().cpu(), query_dino[0].detach().cpu(),
                     batch["input_mask"][0].detach().cpu(), query_dino_valid[0].detach().cpu(),
-                    stage=stage, mode=self.arm, k=self.top_k,
+                    stage=stage, mode=mode, k=self.top_k,
                     shuffle_seed=self.seed,
                 )
-                materialize_mode = "point_shuffled" if correspondence_ablate else self.arm
+                materialize_mode = "point_shuffled" if correspondence_ablate else mode
                 tokens, valid = materialize_aligned(
                     coordinates[0].detach().cpu(), batch["input_mask"][0].detach().cpu(),
                     selected, materialize_mode, self.seed, self.memory_tokens,
@@ -188,11 +190,20 @@ class V43RetrievalModel(nn.Module):
             memory_dino_ablate=ablation.get("memory_dino", False),
             memory_ablate=ablation.get("memory", False),
             correspondence_ablate=ablation.get("correspondence", False),
+            retrieval_mode=("scene_shuffled" if ablation.get("wrong_memory") else None),
         )
-        displacement, gate = self.memory(
-            base_output.canonical_displacement, query, memory, memory_valid,
-            batch["input_mask"], return_gate=True,
-        )
+        if isinstance(self.memory, RejectingMechanicalMemory):
+            displacement, gate, source_weights, null_weight = self.memory(
+                base_output.canonical_displacement, query, memory, memory_valid,
+                batch["input_mask"], return_compatibility=True,
+            )
+        else:
+            displacement, gate = self.memory(
+                base_output.canonical_displacement, query, memory, memory_valid,
+                batch["input_mask"], return_gate=True,
+            )
+            source_weights = gate.new_zeros(gate.shape[0], gate.shape[1], self.top_k)
+            null_weight = gate.new_zeros(gate.shape[0], gate.shape[1])
         canonical_shape = shape[:, None] + displacement
         rotated = torch.einsum("btni,btij->btnj", canonical_shape, base_output.rotation)
         output = replace(
@@ -200,11 +211,13 @@ class V43RetrievalModel(nn.Module):
             canonical_shape=canonical_shape,
             position=base_output.com[:, :, None] + rotated,
         )
-        return output, gate, memory_valid
+        return output, gate, memory_valid, source_weights, null_weight
 
 
 def run_epoch(model, loader, device, condition_builder, split, optimizer=None,
-              accumulation=4, max_batches=None, ablation=None):
+              accumulation=4, max_batches=None, ablation=None,
+              wrong_training=False, wrong_safety_weight=.5,
+              wrong_gate_weight=.05):
     training = optimizer is not None
     model.base.eval(); model.memory.train(training)
     if training: optimizer.zero_grad(set_to_none=True)
@@ -215,9 +228,13 @@ def run_epoch(model, loader, device, condition_builder, split, optimizer=None,
             batch = move(raw, device)
             targets, stages = _batch_targets_and_stages(batch)
             condition = condition_builder(batch, stages)
-            output, gate, memory_valid = model.forward_batch(
-                batch, stages, condition, split, ablation,
-            )
+            result = model.forward_batch(batch, stages, condition, split, ablation)
+            if len(result) == 5:
+                output, gate, memory_valid, source_weights, null_weight = result
+            else:
+                output, gate, memory_valid = result
+                source_weights = gate.new_zeros(gate.shape[0], gate.shape[1], 1)
+                null_weight = gate.new_zeros(gate.shape[0], gate.shape[1])
             loss = event_normalized_canonical_mse(output, batch, targets, stages, None, None)
             labels = stages.labels[:, 1:]
             selected = torch.zeros_like(labels, dtype=torch.bool)
@@ -256,11 +273,46 @@ def run_epoch(model, loader, device, condition_builder, split, optimizer=None,
                 family_balanced=True, rigid_family_weight=.25,
                 rigid_zero_weight=0.0,
             )
+            optimized = loss
+            wrong_safety = loss.new_zeros(())
+            wrong_nonnull = loss.new_zeros(())
+            if training and wrong_training:
+                wrong_result = model.forward_batch(
+                    batch, stages, condition, split, {"wrong_memory": True},
+                )
+                wrong_output, wrong_gate, wrong_memory_valid, wrong_weights, _ = wrong_result
+                with torch.no_grad():
+                    base_inputs = {key: batch[key] for key in MODEL_INPUT_KEYS}
+                    base_inputs["oracle_condition"] = condition
+                    base_output = model.base(**base_inputs)
+                target_energy = (
+                    targets.displacement.square().sum(-1) * valid
+                ).sum() / valid.sum().clamp_min(1)
+                safety_energy = (
+                    (wrong_output.canonical_displacement
+                     - base_output.canonical_displacement).square().sum(-1) * valid
+                ).sum() / valid.sum().clamp_min(1)
+                wrong_safety = safety_energy / target_energy.clamp_min(1e-12).detach()
+                wrong_active = wrong_memory_valid.any(
+                    dim=tuple(range(2, wrong_memory_valid.ndim))
+                )
+                wrong_nonnull = wrong_gate.mean()
+                optimized = (loss + wrong_safety_weight * wrong_safety
+                             + wrong_gate_weight * wrong_nonnull)
             # The zero-memory arm is an exact frozen-base control and therefore
             # intentionally has no differentiable retrieval path.
-            if training and loss.requires_grad:
-                (loss / accumulation).backward()
+            if training and optimized.requires_grad:
+                (optimized / accumulation).backward()
             total += float(loss.detach()); batches += 1
+            active_memory_frames = memory_valid.any(
+                dim=tuple(range(2, memory_valid.ndim))
+            )
+            compatibility_mean = (
+                source_weights.mean(-1) * active_memory_frames
+            ).sum() / active_memory_frames.sum().clamp_min(1)
+            active_null_mean = (
+                null_weight * active_memory_frames
+            ).sum() / active_memory_frames.sum().clamp_min(1)
             rows.append({"uid": batch["uid"][0], "objective": float(loss.detach()),
                          "canonical_nrmse": float(canonical_nrmse.detach()),
                          "spatial_cosine": float(spatial_cosine.detach()),
@@ -268,6 +320,10 @@ def run_epoch(model, loader, device, condition_builder, split, optimizer=None,
                          "strain_loss": float(local_losses.strain.detach()),
                          "edge_length_loss": float(local_losses.edge_length.detach()),
                          "gate_mean": float(gate.detach().mean()),
+                         "source_compatibility_mean": float(compatibility_mean.detach()),
+                         "null_weight_mean": float(active_null_mean.detach()),
+                         "wrong_safety_loss": float(wrong_safety.detach()),
+                         "wrong_nonnull_mass": float(wrong_nonnull.detach()),
                          "valid_memory_tokens": int(memory_valid.sum())})
             if training and loss.requires_grad and batches % accumulation == 0:
                 torch.nn.utils.clip_grad_norm_(model.memory.parameters(), 1.0)
@@ -284,7 +340,8 @@ def run_epoch(model, loader, device, condition_builder, split, optimizer=None,
 def train_v43(root, manifest, champion, bank, output, seed, arm, *, device="cuda",
               epochs=120, draws=40, lr=2e-4, accumulation=4, patience=20,
               max_batches=None, top_k=3, memory_tokens=32,
-              architecture="compact_memory"):
+              architecture="compact_memory", wrong_training=False,
+              wrong_safety_weight=.5, wrong_gate_weight=.05):
     seed_all(seed); device = torch.device(device); output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     train_ds = V41TrajectoryDataset(root, manifest, "train", "real", seed,
@@ -299,6 +356,9 @@ def train_v43(root, manifest, champion, bank, output, seed, arm, *, device="cuda
                  for name, value in base.state_dict().items()}
     if architecture == "compact_memory":
         model = V43RetrievalModel(base, bank, arm, top_k, memory_tokens, seed)
+    elif architecture in {"compatibility_gate", "compatibility_gate_wrong_training"}:
+        model = V43RetrievalModel(base, bank, arm, top_k, memory_tokens, seed)
+        model.memory = RejectingMechanicalMemory(QUERY_DIM, MEMORY_DIM, 128, 4)
     elif architecture == "explicit_field_attention":
         model = FieldAttentionModel(base, bank, seed, top_k)
     else:
@@ -315,6 +375,9 @@ def train_v43(root, manifest, champion, bank, output, seed, arm, *, device="cuda
               "trainable_parameters": sum(
                   parameter.numel() for parameter in model.memory.parameters()
               ),
+              "wrong_training": wrong_training,
+              "wrong_safety_weight": wrong_safety_weight,
+              "wrong_gate_weight": wrong_gate_weight,
               "champion": str(champion), "champion_sha256": file_sha256(champion),
               "champion_epoch": source["epoch"], "test_data_used": False}
     (output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
@@ -323,7 +386,10 @@ def train_v43(root, manifest, champion, bank, output, seed, arm, *, device="cuda
         for epoch in range(1, epochs + 1):
             started = time.time()
             train_loss, _ = run_epoch(model, train_loader, device, builder, "train",
-                                      optimizer, accumulation, max_batches)
+                                      optimizer, accumulation, max_batches,
+                                      wrong_training=wrong_training,
+                                      wrong_safety_weight=wrong_safety_weight,
+                                      wrong_gate_weight=wrong_gate_weight)
             val_loss, rows = run_epoch(model, val_loader, device, builder,
                                        "validation", max_batches=max_batches)
             improved = val_loss < best
@@ -351,6 +417,7 @@ def train_v43(root, manifest, champion, bank, output, seed, arm, *, device="cuda
             "zero_memory_dino": {"memory_dino": True},
             "zero_memory": {"memory": True},
             "point_shuffled_correspondence": {"correspondence": True},
+            "wrong_object_memory": {"wrong_memory": True},
         })
         for name, ablation in ablations.items():
             objective, rows = run_epoch(
