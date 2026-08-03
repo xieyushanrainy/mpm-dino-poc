@@ -1,0 +1,30 @@
+{
+  "version": "v43_compact_vs_field_attention_v1_frozen",
+  "status": "implementation_smoke_only_full_run_not_started",
+  "population": "soft_body_only",
+  "architectures": ["compact_memory", "explicit_field_attention"],
+  "seeds": [42, 123, 456],
+  "retrieval": "aligned_dino_top3_fixed_per_query",
+  "top_k": 3,
+  "compact_tokens_per_source": 32,
+  "field_correspondence": "nearest_normalized_geometry_point",
+  "field_time_alignment": "same_oracle_stage_nearest_normalized_event_time",
+  "parameter_matching": {
+    "compact_memory": 186756,
+    "explicit_field_attention": 186819,
+    "relative_difference": 0.000337
+  },
+  "champion": {
+    "path": "v42/checkpoints/v42_adapter_full_seed42_best.pt",
+    "sha256": "85dd4bb3024268ec1b2dedbf1a6ed09d1175628a8f1cdb995060fcf5430c4dfb",
+    "frozen": true
+  },
+  "objective": "event_frame_amplitude_normalized_canonical_mse_v1",
+  "fixed_weight_field_ablations": [
+    "zero_source_deformation",
+    "point_shuffled_correspondence",
+    "zero_memory"
+  ],
+  "test_data_used": false,
+  "large_run_authorized": false
+}

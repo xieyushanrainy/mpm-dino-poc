@@ -14,8 +14,11 @@ from .v41_data import MODEL_INPUT_KEYS, UIDBalancedSampler, V41TrajectoryDataset
 from .v41_train import atomic_torch_save, move, seed_all
 from .v42_contact_curvature import DirectProbeConditionBuilder, oracle_floor_contact_features
 from .v42_gate2 import _batch_targets_and_stages, file_sha256
+from .v42_losses import compute_v42_local_losses
 from .v42_model import V42RotationAwareSurrogate
 from .v42_oracle import EVENT_STAGES, event_normalized_canonical_mse
+from .v42_oracle import temporal_features
+from .v43_field_attention import FieldAttentionModel, FieldBank, FieldEntry
 from .v43_retrieval import (
     AttendedMechanicalMemory, MemoryEntry, RetrievalBank,
     materialize_aligned, retrieve,
@@ -83,6 +86,33 @@ def build_bank(root, manifest):
                 field_provenance=item["episode_id"] + ":canonical_target",
             ))
     return RetrievalBank(entries)
+
+
+def build_field_bank(root, manifest):
+    dataset = V41TrajectoryDataset(root, manifest, "train", "real", 42,
+                                   families=("soft_body",))
+    entries, seen = [], set()
+    for index in range(len(dataset)):
+        item = dataset[index]
+        if item["uid"] in seen or item["panel"] != "Z":
+            continue
+        seen.add(item["uid"])
+        batch = {key: (value[None] if torch.is_tensor(value) else [value])
+                 for key, value in item.items()}
+        targets, stages = _batch_targets_and_stages(batch)
+        entries.append(FieldEntry(
+            uid=item["uid"], split="train",
+            coordinates=(targets.reference_shape[0] / targets.radius[0]).cpu(),
+            dino=batch["dino"][0].cpu(),
+            point_valid=batch["input_mask"][0].cpu(),
+            dino_valid=batch["dino_valid"][0].cpu(),
+            displacement=(targets.displacement[0] / targets.radius[0]).cpu(),
+            contact=oracle_floor_contact_features(batch)[0].cpu(),
+            stages=stages.labels[0, 1:].cpu(),
+            event_time=temporal_features(stages, 59)[0, :, -1].cpu(),
+            provenance=item["episode_id"] + ":canonical_trajectory",
+        ))
+    return FieldBank(entries)
 
 
 class V43RetrievalModel(nn.Module):
@@ -189,12 +219,54 @@ def run_epoch(model, loader, device, condition_builder, split, optimizer=None,
                 batch, stages, condition, split, ablation,
             )
             loss = event_normalized_canonical_mse(output, batch, targets, stages, None, None)
+            labels = stages.labels[:, 1:]
+            selected = torch.zeros_like(labels, dtype=torch.bool)
+            for event_stage in EVENT_STAGES:
+                selected |= labels.eq(int(event_stage))
+            valid = (
+                batch["target_mask"] & targets.valid_rotation[:, :, None]
+                & selected[:, :, None]
+            )
+            error = output.canonical_displacement - targets.displacement
+            canonical_nrmse = torch.sqrt(
+                (error.square().sum(-1) * valid).sum()
+                / (3 * valid.sum()).clamp_min(1)
+            ) / targets.radius.mean().clamp_min(1e-8)
+            dot = (output.canonical_displacement * targets.displacement).sum(-1)
+            denominator = (
+                torch.linalg.vector_norm(output.canonical_displacement, dim=-1)
+                * torch.linalg.vector_norm(targets.displacement, dim=-1)
+            ).clamp_min(1e-8)
+            spatial_cosine = ((dot / denominator) * valid).sum() / valid.sum().clamp_min(1)
+            pred_curve = torch.sqrt(
+                (output.canonical_displacement.square().sum(-1) * batch["target_mask"]).sum(2)
+                / batch["target_mask"].sum(2).clamp_min(1)
+            )
+            target_curve = torch.sqrt(
+                (targets.displacement.square().sum(-1) * batch["target_mask"]).sum(2)
+                / batch["target_mask"].sum(2).clamp_min(1)
+            )
+            peak_ratio = pred_curve.max() / target_curve.max().clamp_min(1e-8)
+            local_losses = compute_v42_local_losses(
+                output, batch, targets=targets,
+                frame_weights=stages.weights[:, 1:],
+                soft_deformation_amplification_cap=1.0,
+                soft_deformation_quantile=.95,
+                soft_deformation_floor_fraction=.005,
+                family_balanced=True, rigid_family_weight=.25,
+                rigid_zero_weight=0.0,
+            )
             # The zero-memory arm is an exact frozen-base control and therefore
             # intentionally has no differentiable retrieval path.
             if training and loss.requires_grad:
                 (loss / accumulation).backward()
             total += float(loss.detach()); batches += 1
             rows.append({"uid": batch["uid"][0], "objective": float(loss.detach()),
+                         "canonical_nrmse": float(canonical_nrmse.detach()),
+                         "spatial_cosine": float(spatial_cosine.detach()),
+                         "predicted_to_target_peak_ratio": float(peak_ratio.detach()),
+                         "strain_loss": float(local_losses.strain.detach()),
+                         "edge_length_loss": float(local_losses.edge_length.detach()),
                          "gate_mean": float(gate.detach().mean()),
                          "valid_memory_tokens": int(memory_valid.sum())})
             if training and loss.requires_grad and batches % accumulation == 0:
@@ -211,7 +283,8 @@ def run_epoch(model, loader, device, condition_builder, split, optimizer=None,
 
 def train_v43(root, manifest, champion, bank, output, seed, arm, *, device="cuda",
               epochs=120, draws=40, lr=2e-4, accumulation=4, patience=20,
-              max_batches=None, top_k=3, memory_tokens=32):
+              max_batches=None, top_k=3, memory_tokens=32,
+              architecture="compact_memory"):
     seed_all(seed); device = torch.device(device); output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     train_ds = V41TrajectoryDataset(root, manifest, "train", "real", seed,
@@ -224,14 +297,24 @@ def train_v43(root, manifest, champion, bank, output, seed, arm, *, device="cuda
     base, source = load_champion(champion, device)
     protected = {name: value.detach().cpu().clone()
                  for name, value in base.state_dict().items()}
-    model = V43RetrievalModel(base, bank, arm, top_k, memory_tokens, seed).to(device)
+    if architecture == "compact_memory":
+        model = V43RetrievalModel(base, bank, arm, top_k, memory_tokens, seed)
+    elif architecture == "explicit_field_attention":
+        model = FieldAttentionModel(base, bank, seed, top_k)
+    else:
+        raise ValueError(f"unknown architecture: {architecture}")
+    model = model.to(device)
     optimizer = torch.optim.AdamW(model.memory.parameters(), lr=lr, weight_decay=1e-4)
     builder = DirectProbeConditionBuilder(True)
-    config = {"experiment": "v43_attended_mechanical_memory_v1", "arm": arm,
+    config = {"experiment": "v43_compact_vs_field_attention_v1", "arm": arm,
+              "architecture": architecture,
               "seed": seed, "epochs": epochs, "draws": draws, "lr": lr,
               "accumulation": accumulation, "patience": patience,
               "top_k": top_k, "memory_tokens": memory_tokens,
               "bank_sha256": bank.content_sha256,
+              "trainable_parameters": sum(
+                  parameter.numel() for parameter in model.memory.parameters()
+              ),
               "champion": str(champion), "champion_sha256": file_sha256(champion),
               "champion_epoch": source["epoch"], "test_data_used": False}
     (output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
@@ -259,12 +342,17 @@ def train_v43(root, manifest, champion, bank, output, seed, arm, *, device="cuda
     model.memory.load_state_dict(best_state["model"])
     fixed_weight_ablations = {}
     if arm == "aligned_dino":
-        for name, ablation in {
+        ablations = ({
+            "zero_source_deformation": {"source_deformation": True},
+            "zero_memory": {"memory": True},
+            "point_shuffled_correspondence": {"correspondence": True},
+        } if architecture == "explicit_field_attention" else {
             "zero_query_dino": {"query_dino": True},
             "zero_memory_dino": {"memory_dino": True},
             "zero_memory": {"memory": True},
             "point_shuffled_correspondence": {"correspondence": True},
-        }.items():
+        })
+        for name, ablation in ablations.items():
             objective, rows = run_epoch(
                 model, val_loader, device, builder, "validation",
                 max_batches=max_batches, ablation=ablation,
