@@ -1,5 +1,11 @@
 # V4.3 retrieval-conditioned deformation design
 
+> Priority update (2026-08-03): before launching the full retrieval matrix, run
+> the matched causal-contact replacement experiment in
+> [`CAUSAL_CONTACT_DESIGN.md`](CAUSAL_CONTACT_DESIGN.md). This does not change
+> the frozen retrieval design; it measures how much of the V4.2 oracle base can
+> be made deployable and determines which base condition V4.3 should inherit.
+
 ## Status and scope
 
 This document freezes the first validation-only V4.3 design.  It tests whether
