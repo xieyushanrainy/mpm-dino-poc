@@ -100,3 +100,13 @@ promote a causal method from the scalar objective alone.
   verifies bit-identical causal conditions.
 - One-batch CPU training, validation, checkpointing, protected-path checks, and
   completion reporting pass for `causal_continuous`.
+
+## Targeted third optimization replicate
+
+The optional `--source-seed` runner mode holds the frozen Gate-1E physical/COM/
+rotation model and oracle ceiling fixed while changing the adapter training
+seed. The reviewed third replicate uses training seed 123 with source seed 42
+and trains only `static_control` and `causal_continuous`. This isolates whether
+the successful causal seed-42 result depends on adapter initialization/sampling.
+It is not a fully independent end-to-end seed, which would require training new
+Gate-1E and oracle seed-123 checkpoints first.

@@ -23,13 +23,24 @@ def main(args):
     variants = tuple(args.variants)
     sources, oracle = {}, {}
     for seed in args.seeds:
-        gate1e = Path(args.gate1e_root) / f"seed{seed}" / "best_total.pt"
-        champion = Path(args.oracle_root) / "adapter_full" / f"seed{seed}" / "best.pt"
-        complete = Path(args.oracle_root) / "adapter_full" / f"seed{seed}" / "RUN_COMPLETE.json"
+        source_seed = args.source_seed if args.source_seed is not None else seed
+        gate1e = Path(args.gate1e_root) / f"seed{source_seed}" / "best_total.pt"
+        champion = (
+            Path(args.oracle_root) / "adapter_full"
+            / f"seed{source_seed}" / "best.pt"
+        )
+        complete = (
+            Path(args.oracle_root) / "adapter_full"
+            / f"seed{source_seed}" / "RUN_COMPLETE.json"
+        )
         if not gate1e.exists():
-            raise FileNotFoundError(f"missing Gate-1E seed {seed}: {gate1e}")
+            raise FileNotFoundError(
+                f"missing Gate-1E source seed {source_seed}: {gate1e}"
+            )
         if not champion.exists() or not complete.exists():
-            raise FileNotFoundError(f"missing oracle ceiling seed {seed}: {champion}")
+            raise FileNotFoundError(
+                f"missing oracle ceiling source seed {source_seed}: {champion}"
+            )
         ceiling = json.loads(complete.read_text())
         champion_sha = file_sha256(champion)
         champion_state = torch.load(
@@ -41,14 +52,18 @@ def main(args):
             or champion_config.get("oracle_injection") != "adapter"
             or champion_config.get("model_contract_version")
             != "direct_point_decoder_probe_v1"
-            or int(champion_config.get("seed", -1)) != seed
+            or int(champion_config.get("seed", -1)) != source_seed
             or ceiling["best_checkpoint_sha256"] != champion_sha
         ):
-            raise ValueError(f"invalid oracle ceiling contract for seed {seed}")
+            raise ValueError(
+                f"invalid oracle ceiling contract for source seed {source_seed}"
+            )
         sources[str(seed)] = {
+            "training_seed": seed, "source_seed": source_seed,
             "path": str(gate1e), "sha256": file_sha256(gate1e),
         }
         oracle[str(seed)] = {
+            "source_seed": source_seed,
             "path": str(champion), "sha256": champion_sha,
             "best_epoch": ceiling["best_epoch"],
             "best_selection": ceiling["best_selection"],
@@ -141,6 +156,13 @@ if __name__ == "__main__":
     )
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--seeds", type=int, nargs="+", default=[42, 456])
+    parser.add_argument(
+        "--source-seed", type=int,
+        help=(
+            "Use one frozen Gate-1E/oracle source for every training seed; "
+            "this isolates adapter optimization randomness."
+        ),
+    )
     parser.add_argument(
         "--variants", nargs="+", choices=CAUSAL_VARIANTS,
         default=list(CAUSAL_VARIANTS),
