@@ -167,15 +167,21 @@ def run_epoch(model, loader, device, builder, split, optimizer=None, smoothness_
             identity_errors = geodesic_radians(torch.eye(3, device=device).expand_as(target_rotation), target_rotation)
             v42_errors = geodesic_radians(v42_rotation, target_rotation)
             valid_values = errors[0, valid[0]]
+            has_valid = bool(valid_values.numel())
             row = {"uid": batch["uid"][0], "family": batch["family"][0], "panel": batch["panel"][0],
-                   "mean_error_deg": math.degrees(float(valid_values.detach().mean())) if valid_values.numel() else None,
-                   "median_error_deg": math.degrees(float(valid_values.detach().median())) if valid_values.numel() else None,
-                   "identity_mean_error_deg": math.degrees(float(identity_errors[0, valid[0]].mean())),
-                   "v42_mean_error_deg": math.degrees(float(v42_errors[0, valid[0]].mean())),
+                   "valid_kabsch_frames": int(valid[0].sum()),
+                   "mean_error_deg": math.degrees(float(valid_values.detach().mean())) if has_valid else None,
+                   "median_error_deg": math.degrees(float(valid_values.detach().median())) if has_valid else None,
+                   "identity_mean_error_deg": math.degrees(float(identity_errors[0, valid[0]].mean())) if has_valid else None,
+                   "v42_mean_error_deg": math.degrees(float(v42_errors[0, valid[0]].mean())) if has_valid else None,
                    "gate_mean": float(gate.detach().mean()), "source_uids": source_uids,
                    "source_families": source_families,
                    "cross_family_rate": sum(f != batch["family"][0] for f in source_families) / len(source_families)}
-            row["improvement_vs_identity_deg"] = row["identity_mean_error_deg"] - row["mean_error_deg"]
+            row["improvement_vs_identity_deg"] = (
+                row["identity_mean_error_deg"] - row["mean_error_deg"]
+                if row["identity_mean_error_deg"] is not None and row["mean_error_deg"] is not None
+                else None
+            )
             static = valid[0] & identity_errors[0].le(math.radians(.25))
             row["inactive_static_false_rotation_deg"] = (
                 math.degrees(float(geodesic_radians(

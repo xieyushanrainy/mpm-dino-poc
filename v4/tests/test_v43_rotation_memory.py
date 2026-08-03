@@ -8,6 +8,7 @@ from mpm_dino_v4.v43_rotation_memory import (
     assert_protected_identity, geodesic_radians, protected_snapshot,
     retrieve_rotation, so3_exp,
 )
+from mpm_dino_v4.v43_rotation_train import summarize
 
 
 def entry(uid, family="rigid", split="train", offset=0.):
@@ -73,3 +74,15 @@ def test_reader_optimizer_preserves_protected_state_and_output():
     optimizer.step()
     assert_protected_identity(protected, before)
     assert torch.equal(output_before, protected(x))
+
+
+def test_summary_ignores_uid_with_no_valid_kabsch_frames():
+    rows = [
+        {"uid": "bad", "family": "rigid", "panel": "Z", "mean_error_deg": None,
+         "median_error_deg": None, "identity_mean_error_deg": None, "cross_family_rate": 0.},
+        {"uid": "good", "family": "soft_body", "panel": "V", "mean_error_deg": 2.,
+         "median_error_deg": 1.5, "identity_mean_error_deg": 3., "cross_family_rate": 1.},
+    ]
+    report = summarize(rows)
+    assert report["rigid"]["mean_error_deg"] is None
+    assert report["family_balanced_mean_deg"] == 2.
