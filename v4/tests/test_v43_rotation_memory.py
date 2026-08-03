@@ -40,7 +40,7 @@ def test_so3_is_proper_and_geodesic_identity():
     r = so3_exp(torch.tensor([[.1, -.2, .3]]))
     assert torch.allclose(r.transpose(-1, -2) @ r, torch.eye(3)[None], atol=1e-5)
     assert torch.allclose(torch.linalg.det(r), torch.ones(1), atol=1e-5)
-    assert geodesic_radians(r, r).item() < 1e-4
+    assert geodesic_radians(r, r).item() < 1e-3
 
 
 def test_zero_memory_is_exact_identity_and_residual_is_bounded():
@@ -86,3 +86,21 @@ def test_summary_ignores_uid_with_no_valid_kabsch_frames():
     report = summarize(rows)
     assert report["rigid"]["mean_error_deg"] is None
     assert report["family_balanced_mean_deg"] == 2.
+
+
+def test_near_identity_so3_training_stays_finite_across_steps():
+    model = CompactRotationReader(5, 7, hidden_dim=16, heads=4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=2e-4)
+    query = torch.zeros(2, 59, 5)
+    memory = torch.zeros(2, 59, 3, 7)
+    valid = torch.ones(2, 59, 3, dtype=torch.bool)
+    target = torch.eye(3).expand(2, 59, 3, 3)
+    for _ in range(5):
+        optimizer.zero_grad(set_to_none=True)
+        rotation, _, _ = model(query, memory, valid)
+        loss = geodesic_radians(rotation, target).mean()
+        assert torch.isfinite(loss)
+        loss.backward()
+        assert all(p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters())
+        optimizer.step()
+        assert all(torch.isfinite(p).all() for p in model.parameters())

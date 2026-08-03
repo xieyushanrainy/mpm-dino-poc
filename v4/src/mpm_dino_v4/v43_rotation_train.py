@@ -186,14 +186,14 @@ def run_epoch(model, loader, device, builder, split, optimizer=None, smoothness_
             row["inactive_static_false_rotation_deg"] = (
                 math.degrees(float(geodesic_radians(
                     rotation[0, static], torch.eye(3, device=device).expand(int(static.sum()), 3, 3)
-                ).mean())) if static.any() else None
+                ).detach().mean())) if static.any() else None
             )
             for horizon in HORIZONS:
                 index = horizon - 1
-                row[f"H{horizon}_deg"] = math.degrees(float(errors[0, index])) if valid[0, index] else None
+                row[f"H{horizon}_deg"] = math.degrees(float(errors[0, index].detach())) if valid[0, index] else None
             for phase_name in ("pre_contact", "contact", "post_contact"):
                 mask = valid[0] & torch.tensor([p == phase_name for p in phase_names], device=device)
-                row[phase_name + "_deg"] = math.degrees(float(errors[0, mask].mean())) if mask.any() else None
+                row[phase_name + "_deg"] = math.degrees(float(errors[0, mask].detach().mean())) if mask.any() else None
             rows.append(row)
             if training and batches % accumulation == 0:
                 torch.nn.utils.clip_grad_norm_(model.reader.parameters(), 1.0)

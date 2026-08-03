@@ -30,21 +30,25 @@ def assert_protected_identity(module: nn.Module, before: dict[str, Tensor]) -> N
 def so3_exp(vector: Tensor) -> Tensor:
     """Differentiable Rodrigues exponential for row-vector rotation matrices."""
     angle = torch.linalg.vector_norm(vector, dim=-1, keepdim=True)
-    axis = vector / angle.clamp_min(1e-8)
-    x, y, z = axis.unbind(-1)
+    x, y, z = vector.unbind(-1)
     zero = torch.zeros_like(x)
     skew = torch.stack((zero, -z, y, z, zero, -x, -y, x, zero), -1).reshape(*vector.shape[:-1], 3, 3)
     eye = torch.eye(3, dtype=vector.dtype, device=vector.device).expand_as(skew)
-    a = torch.where(angle > 1e-6, torch.sin(angle) / angle, 1 - angle.square() / 6)
-    b = torch.where(angle > 1e-6, (1 - torch.cos(angle)) / angle.square(), .5 - angle.square() / 24)
-    raw = torch.stack((zero, -vector[..., 2], vector[..., 1], vector[..., 2], zero,
-                       -vector[..., 0], -vector[..., 1], vector[..., 0], zero), -1).reshape_as(skew)
-    return eye + a[..., None] * raw + b[..., None] * (raw @ raw)
+    # torch.sinc avoids evaluating 0/0 in either branch and has finite
+    # derivatives at identity: sin(a)/a and (1-cos(a))/a^2 respectively.
+    a = torch.sinc(angle / math.pi)
+    b = .5 * torch.sinc(angle / (2 * math.pi)).square()
+    return eye + a[..., None] * skew + b[..., None] * (skew @ skew)
 
 
 def geodesic_radians(predicted: Tensor, target: Tensor) -> Tensor:
     relative = predicted.transpose(-1, -2) @ target
-    cosine = ((relative.diagonal(dim1=-2, dim2=-1).sum(-1) - 1) / 2).clamp(-1, 1)
+    # A small interior clamp prevents the infinite acos derivative at exact
+    # identity/pi while changing reported angles by at most ~0.028 degrees.
+    epsilon = 1e-7 if predicted.dtype in {torch.float32, torch.bfloat16, torch.float16} else 1e-12
+    cosine = ((relative.diagonal(dim1=-2, dim2=-1).sum(-1) - 1) / 2).clamp(
+        -1 + epsilon, 1 - epsilon,
+    )
     return torch.acos(cosine)
 
 
