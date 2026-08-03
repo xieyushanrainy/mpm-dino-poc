@@ -11,7 +11,7 @@ import torch
 from torch import Tensor, nn
 
 
-ARMS = ("zero_memory", "geometry", "aligned_dino", "scene_shuffled", "point_shuffled")
+ARMS = ("zero_memory", "geometry", "aligned_dino", "scene_shuffled")
 
 
 def protected_snapshot(module: nn.Module) -> dict[str, Tensor]:

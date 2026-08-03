@@ -58,7 +58,7 @@ objectives and checkpoints.
 | D | Geometry retrieval, all DINO channels zero | yes |
 | E | Aligned-DINO top-3 compact memory | yes |
 | F | Deterministic scene-shuffled/wrong-object memory | yes |
-| G | Point-shuffled DINO correspondence | yes if local DINO retained |
+| G | Point-shuffled DINO correspondence | not applicable in v1: local DINO is not retained |
 | H | Raw top-k copied rotation | report only |
 | I | Oracle-best training memory | noncausal report only |
 

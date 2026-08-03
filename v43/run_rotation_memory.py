@@ -21,8 +21,9 @@ sys.path[:0] = [str(ROOT / "v2" / "src"), str(ROOT / "v3" / "src"),
 
 from mpm_dino_v4.v42_rotation_audit import proper_kabsch, rotation_vector  # noqa: E402
 from mpm_dino_v4.v43_rotation_memory import (  # noqa: E402
-    CompactRotationReader, RotationBank, RotationMemoryEntry, geodesic_radians,
+    ARMS, CompactRotationReader, RotationBank, RotationMemoryEntry, geodesic_radians,
 )
+from mpm_dino_v4.v43_rotation_train import train_rotation_memory  # noqa: E402
 
 
 def build_rotation_bank(dataset_root: Path, manifest: dict) -> RotationBank:
@@ -102,6 +103,20 @@ def main(args):
     if args.smoke:
         report["cpu_optimizer_smoke_loss_rad"] = optimizer_smoke(bank, matrix["max_residual_degrees"])
         report["status"] = "smoke_complete"
+    if args.full:
+        for arm in args.arms:
+            for seed in args.seeds:
+                output = args.runs / arm / f"seed{seed}"
+                if (output / "RUN_COMPLETE.json").exists():
+                    print(f"skip complete: {output}", flush=True); continue
+                train_rotation_memory(
+                    args.dataset, manifest, args.champion, bank, output, seed, arm,
+                    device=args.device, epochs=args.epochs, draws=args.draws, lr=args.lr,
+                    accumulation=args.accumulation, patience=args.patience,
+                    top_k=matrix["top_k"], max_degrees=matrix["max_residual_degrees"],
+                    smoothness_weight=args.smoothness_weight, max_batches=args.max_batches,
+                )
+        report["status"] = "full_matrix_complete"
     (args.runs / "RUN_COMPLETE.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
 
@@ -114,4 +129,15 @@ if __name__ == "__main__":
     parser.add_argument("--runs", type=Path, default=Path("v43/run/rotation_memory"))
     parser.add_argument("--device", default="cuda")  # reserved for explicit full-matrix runner
     parser.add_argument("--smoke", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--full", action="store_true")
+    parser.add_argument("--champion", type=Path, default=Path("v42/checkpoints/v42_adapter_full_seed42_best.pt"))
+    parser.add_argument("--seeds", nargs="+", type=int, default=[42, 123, 456])
+    parser.add_argument("--arms", nargs="+", choices=ARMS, default=list(ARMS))
+    parser.add_argument("--epochs", type=int, default=120)
+    parser.add_argument("--draws", type=int, default=40)
+    parser.add_argument("--lr", type=float, default=2e-4)
+    parser.add_argument("--accumulation", type=int, default=4)
+    parser.add_argument("--patience", type=int, default=20)
+    parser.add_argument("--smoothness-weight", type=float, default=.01)
+    parser.add_argument("--max-batches", type=int)
     main(parser.parse_args())
