@@ -1,0 +1,17 @@
+{
+  "version": "v43_rotation_memory_matrix_v1",
+  "frozen": true,
+  "test_data_used": false,
+  "families": ["rigid", "soft_body"],
+  "family_as_model_input": false,
+  "seeds": [42, 123, 456],
+  "top_k": 3,
+  "max_residual_degrees": 20.0,
+  "kabsch_ratio_threshold": 0.001,
+  "base": "identity",
+  "retrieval_policy": "unified_rigid_soft",
+  "arms": ["zero_memory", "geometry", "aligned_dino", "scene_shuffled", "point_shuffled"],
+  "report_only": ["identity", "frozen_v42_rotation", "raw_top_k_copy", "oracle_best_training_memory"],
+  "fixed_weight_ablations": ["zero_query_dino", "zero_memory_dino", "zero_memory", "wrong_memory", "point_shuffled_correspondence"],
+  "horizons": [1, 8, 16, 30, 40, 59]
+}
