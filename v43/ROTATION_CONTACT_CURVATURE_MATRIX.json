@@ -1,0 +1,14 @@
+{
+  "version": "v43_rotation_contact_curvature_matrix_v1",
+  "frozen": true,
+  "oracle_contact": true,
+  "deployable": false,
+  "test_data_used": false,
+  "families": ["rigid", "soft_body"],
+  "seeds": [42, 123, 456],
+  "top_k": 3,
+  "retrieval": "geometry_unified_rigid_soft",
+  "max_residual_degrees": 20.0,
+  "variants": ["geometry_base", "contact_timing", "contact_patch", "contact_curvature", "curvature_shuffled", "wrong_memory_contact"],
+  "dominant_uid_sensitivity": "db01c9486b1d4590ab7d31836b1df4d9"
+}

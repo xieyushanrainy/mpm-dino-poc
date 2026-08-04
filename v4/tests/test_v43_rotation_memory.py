@@ -8,7 +8,8 @@ from mpm_dino_v4.v43_rotation_memory import (
     assert_protected_identity, geodesic_radians, protected_snapshot,
     retrieve_rotation, so3_exp,
 )
-from mpm_dino_v4.v43_rotation_train import summarize
+from mpm_dino_v4.v43_rotation_train import rotation_contact_features, summarize
+from test_v42 import inputs
 
 
 def entry(uid, family="rigid", split="train", offset=0.):
@@ -104,3 +105,37 @@ def test_near_identity_so3_training_stays_finite_across_steps():
         assert all(p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters())
         optimizer.step()
         assert all(torch.isfinite(p).all() for p in model.parameters())
+
+
+def contact_batch():
+    batch = inputs(frames=7)
+    batch["target"] = batch["x1"][:, None].expand(-1, 7, -1, -1).clone()
+    batch["target"][..., 2] -= torch.linspace(0, .05, 7)[None, :, None]
+    batch["target_mask"] = batch["input_mask"][:, None].expand(-1, 7, -1)
+    batch["floor_z"] = torch.zeros(1)
+    return batch
+
+
+def test_rotation_contact_variants_have_matched_channels():
+    batch = contact_batch()
+    base = rotation_contact_features(batch, "geometry_base")
+    timing = rotation_contact_features(batch, "contact_timing")
+    patch = rotation_contact_features(batch, "contact_patch")
+    full = rotation_contact_features(batch, "contact_curvature")
+    assert base.shape == timing.shape == patch.shape == full.shape == (1, 7, 10)
+    assert torch.count_nonzero(base) == 0
+    assert torch.count_nonzero(timing[..., 3:]) == 0
+    assert torch.count_nonzero(patch[..., 6:]) == 0
+    assert torch.equal(timing[..., :3], patch[..., :3])
+    assert torch.equal(patch[..., :6], full[..., :6])
+    assert torch.isfinite(full).all()
+
+
+def test_curvature_shuffle_is_deterministic_and_preserves_contact_patch():
+    batch = contact_batch()
+    full = rotation_contact_features(batch, "contact_curvature", 42)
+    one = rotation_contact_features(batch, "curvature_shuffled", 42)
+    two = rotation_contact_features(batch, "curvature_shuffled", 42)
+    assert torch.equal(one, two)
+    assert torch.equal(one[..., :6], full[..., :6])
+    assert not torch.equal(one[..., 6:], full[..., 6:])

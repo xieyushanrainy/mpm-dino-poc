@@ -12,7 +12,9 @@ from torch.utils.data import DataLoader
 from .model import masked_mean
 from .v41_data import MODEL_INPUT_KEYS, UIDBalancedSampler, V41TrajectoryDataset
 from .v41_train import atomic_torch_save, move, seed_all
-from .v42_contact_curvature import DirectProbeConditionBuilder
+from .v42_contact_curvature import (
+    DirectProbeConditionBuilder, curvature_features, oracle_floor_contact_features,
+)
 from .v42_gate2 import _batch_targets_and_stages, file_sha256
 from .v43_rotation_memory import (
     ARMS, CompactRotationReader, RotationBank, assert_protected_identity,
@@ -22,8 +24,14 @@ from .v43_train import load_champion
 
 
 MEMORY_DIM = 384 + 3 + 1 + 1 + 1  # pooled DINO, rotvec, valid, phase, geometry distance
-QUERY_DIM = 128 + 384 + 1 + 3     # detached physical, pooled DINO, phase, geometry summary
+ROTATION_CONTACT_DIM = 10          # contact 3, contact centroid/lever arm 3, curvature 4
+QUERY_DIM = 128 + 384 + 1 + 3 + ROTATION_CONTACT_DIM
 HORIZONS = (1, 8, 16, 30, 40, 59)
+CONTACT_VARIANTS = (
+    "geometry_base", "contact_timing", "contact_patch",
+    "contact_curvature", "curvature_shuffled", "wrong_memory_contact",
+)
+DOMINANT_ROTATION_UID = "db01c9486b1d4590ab7d31836b1df4d9"
 
 
 def _pooled_dino(batch: dict) -> Tensor:
@@ -53,6 +61,42 @@ def _target_rotations(batch: dict) -> tuple[Tensor, Tensor]:
     return targets.rotation, targets.valid_rotation
 
 
+def rotation_contact_features(batch: dict, variant: str, seed: int = 0) -> Tensor:
+    """Matched global rotation cues, all zero for the geometry baseline.
+
+    Contact is an explicit future-target oracle. The floor normal is fixed, so
+    the contact-weighted normalized centroid is the signed lever-arm cue.
+    """
+    if variant not in CONTACT_VARIANTS:
+        raise ValueError(f"unknown rotation contact variant: {variant}")
+    b, t = batch["target"].shape[:2]
+    result = batch["target"].new_zeros(b, t, ROTATION_CONTACT_DIM)
+    if variant == "geometry_base":
+        return result
+    contact = oracle_floor_contact_features(batch)
+    valid = batch["target_mask"].to(contact.dtype)
+    count = valid.sum(2).clamp_min(1)
+    result[..., :3] = (contact * valid[..., None]).sum(2) / count[..., None]
+    if variant == "contact_timing":
+        return result.detach()
+    coordinates, point_valid, _ = _query_geometry(batch)
+    proximity = contact[..., 1].clamp_min(0) * valid
+    mass = proximity.sum(2).clamp_min(1e-8)
+    result[..., 3:6] = torch.einsum("btn,bni->bti", proximity, coordinates) / mass[..., None]
+    if variant == "contact_patch":
+        return result.detach()
+    curvature = curvature_features(batch)
+    if variant == "curvature_shuffled":
+        rows = []
+        for index in range(b):
+            generator = torch.Generator(device="cpu").manual_seed(seed + index * 1009)
+            permutation = torch.randperm(curvature.shape[1], generator=generator).to(curvature.device)
+            rows.append(curvature[index, permutation])
+        curvature = torch.stack(rows)
+    result[..., 6:10] = torch.einsum("btn,bni->bti", proximity, curvature) / mass[..., None]
+    return result.detach()
+
+
 def _phase_labels(stages) -> tuple[Tensor, list[str]]:
     labels = stages.labels[:, 1:]
     # Stage numbering is retained in rows; broad phases are stable diagnostics.
@@ -65,9 +109,10 @@ def _phase_labels(stages) -> tuple[Tensor, list[str]]:
 
 class RotationMemoryModel(nn.Module):
     def __init__(self, base: nn.Module, bank: RotationBank, arm: str, seed: int,
-                 top_k: int, max_degrees: float):
+                 top_k: int, max_degrees: float, contact_variant: str = "geometry_base"):
         super().__init__()
         self.base, self.bank, self.arm, self.seed, self.top_k = base, bank, arm, seed, top_k
+        self.contact_variant = contact_variant
         self.reader = CompactRotationReader(QUERY_DIM, MEMORY_DIM, 128, 4, max_degrees)
 
     def _selected(self, batch, coordinates, valid, mode):
@@ -86,7 +131,7 @@ class RotationMemoryModel(nn.Module):
         pooled = _pooled_dino(batch)
         targets, stages = _batch_targets_and_stages(batch)
         phase, phase_names = _phase_labels(stages)
-        mode = self.arm
+        mode = "scene_shuffled" if self.contact_variant == "wrong_memory_contact" else self.arm
         if ablation == "wrong_memory": mode = "scene_shuffled"
         batch["split_name"] = split
         selected = self._selected(batch, coordinates, valid, mode)
@@ -117,8 +162,10 @@ class RotationMemoryModel(nn.Module):
         point_mask = batch["input_mask"][:, None, :, None]
         physical = (base_output.physical_hidden.detach() * point_mask).sum(2)
         physical = physical / point_mask.sum(2).clamp_min(1)
+        rotation_condition = rotation_contact_features(batch, self.contact_variant, self.seed)
         query = torch.cat((physical, query_dino[:, None].expand(-1, 59, -1),
-                           phase[..., None], geometry_summary[:, None].expand(-1, 59, -1)), -1)
+                           phase[..., None], geometry_summary[:, None].expand(-1, 59, -1),
+                           rotation_condition), -1)
         if not memory_valid.any():
             delta = query.new_zeros(query.shape[0], query.shape[1], 3)
             gate = query.new_zeros(query.shape[0], query.shape[1], 1)
@@ -220,12 +267,21 @@ def summarize(rows: list[dict]) -> dict:
     result["cross_family_retrieval_rate"] = mean("cross_family_rate", rows)
     for panel in ("Z", "V"):
         result["panel_" + panel + "_mean_deg"] = mean("mean_error_deg", [r for r in rows if r["panel"] == panel])
+    without = [r for r in rows if r["uid"] != DOMINANT_ROTATION_UID]
+    without_family = []
+    for family in ("rigid", "soft_body"):
+        value = mean("mean_error_deg", [r for r in without if r["family"] == family])
+        if value is not None: without_family.append(value)
+    result["family_balanced_mean_without_dominant_uid_deg"] = (
+        sum(without_family) / len(without_family) if without_family else None
+    )
     return result
 
 
 def train_rotation_memory(root, manifest, champion, bank, output, seed, arm, *, device="cuda",
                           epochs=120, draws=40, lr=2e-4, accumulation=4, patience=20,
-                          top_k=3, max_degrees=20., smoothness_weight=.01, max_batches=None):
+                          top_k=3, max_degrees=20., smoothness_weight=.01, max_batches=None,
+                          contact_variant="geometry_base"):
     seed_all(seed); device = torch.device(device); output = Path(output); output.mkdir(parents=True, exist_ok=True)
     train_ds = V41TrajectoryDataset(root, manifest, "train", "real", seed, families=("rigid", "soft_body"))
     val_ds = V41TrajectoryDataset(root, manifest, "validation", "real", seed, families=("rigid", "soft_body"))
@@ -233,10 +289,12 @@ def train_rotation_memory(root, manifest, champion, bank, output, seed, arm, *, 
     val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
     base, source = load_champion(champion, device)
     protected = protected_snapshot(base)
-    model = RotationMemoryModel(base, bank, arm, seed, top_k, max_degrees).to(device)
+    model = RotationMemoryModel(base, bank, arm, seed, top_k, max_degrees, contact_variant).to(device)
     optimizer = torch.optim.AdamW(model.reader.parameters(), lr=lr, weight_decay=1e-4)
     builder = DirectProbeConditionBuilder(True)
-    config = {"experiment": "v43_rotation_memory_v1", "seed": seed, "arm": arm,
+    config = {"experiment": ("v43_rotation_contact_curvature_v1" if contact_variant != "geometry_base"
+                              else "v43_rotation_memory_v1"), "seed": seed, "arm": arm,
+              "contact_variant": contact_variant,
               "bank_sha256": bank.content_sha256, "champion": str(champion),
               "champion_sha256": file_sha256(champion), "champion_epoch": source["epoch"],
               "families": ["rigid", "soft_body"], "family_as_model_input": False,
