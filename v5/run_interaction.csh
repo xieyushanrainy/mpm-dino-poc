@@ -7,7 +7,8 @@ set PYTHON = .venv-v41/bin/python
 set DATASET = v41/dataset
 set MANIFEST = v41/manifests/v41_uid_splits.json
 set CONFIG = v5/config.default.json
-set RUNS = v5/run
+set GLOBAL_RUNS = v5/run/global_motion
+set INTERACTION_RUNS = v5/run/interaction
 
 if (! -x "$PYTHON") then
   echo "ERROR: Python environment not found or not executable: $PYTHON"
@@ -30,17 +31,17 @@ if (! -f "$CONFIG") then
 endif
 
 foreach seed (42 123 456)
-  if (! -f "$RUNS/com/seed${seed}/best.pt") then
+  if (! -f "$GLOBAL_RUNS/com/seed${seed}/best.pt") then
     echo "ERROR: Missing COM checkpoint for seed $seed"
     exit 1
   endif
-  if (! -f "$RUNS/rotation/seed${seed}/best.pt") then
+  if (! -f "$GLOBAL_RUNS/rotation/seed${seed}/best.pt") then
     echo "ERROR: Missing rotation checkpoint for seed $seed"
     exit 1
   endif
 end
 
-mkdir -p "$RUNS/interaction"
+mkdir -p "$INTERACTION_RUNS"
 if ($status != 0) exit 1
 
 setenv PYTHONPATH ".:v2/src:v4/src:v5/src"
@@ -53,7 +54,7 @@ foreach seed (42 123 456)
   $PYTHON -m mpm_dino_v5.cli train interaction \
     --dataset "$DATASET" \
     --manifest "$MANIFEST" \
-    --output "$RUNS/interaction/seed${seed}" \
+    --output "$INTERACTION_RUNS/seed${seed}" \
     --seed "$seed" \
     --config "$CONFIG" \
     --device cuda \
@@ -62,8 +63,8 @@ foreach seed (42 123 456)
     --lr 0.0002 \
     --patience 20 \
     --accumulation 4 \
-    --com-checkpoint "$RUNS/com/seed${seed}/best.pt" \
-    --rotation-checkpoint "$RUNS/rotation/seed${seed}/best.pt"
+    --com-checkpoint "$GLOBAL_RUNS/com/seed${seed}/best.pt" \
+    --rotation-checkpoint "$GLOBAL_RUNS/rotation/seed${seed}/best.pt"
 
   if ($status != 0) then
     echo "ERROR: interaction seed $seed failed"
