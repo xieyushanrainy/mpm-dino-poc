@@ -1,0 +1,35 @@
+{
+  "model": {
+    "frames": 59,
+    "hidden_dim": 128,
+    "interaction_dim": 128,
+    "blocks": 4,
+    "heads": 4,
+    "dropout": 0.1
+  },
+  "memory": {
+    "enabled": false,
+    "top_k": 3,
+    "tokens_per_source": 32,
+    "phases": [
+      2,
+      3,
+      4
+    ],
+    "residual_bound": 0.05,
+    "gate_logit": -4.0,
+    "permitted_uids": 20
+  },
+  "training": {
+    "seeds": [
+      42,
+      123,
+      456
+    ],
+    "base_qualification": 0.91098,
+    "final_target": 0.7025,
+    "split_sha256": "2f4add1aa6f6f68b965d031cf12bf60f981a10f628a09bdc7f75a574cd42949b",
+    "allow_v4_weights": false
+  },
+  "schema_version": "v5_causal_deformation_v1"
+}
