@@ -7,7 +7,7 @@
   "test_data_used": false,
   "families": ["rigid", "soft_body"],
   "seeds": [42, 123, 456],
-  "variants": ["physical_only", "pooled_contact", "pointwise_contact", "contact_lever", "contact_torque_basis", "contact_shuffled", "zero_event_time"],
+  "variants": ["physical_only", "contact_torque_basis", "contact_shuffled"],
   "max_residual_degrees": 20.0,
   "active_rotation_threshold_degrees": 0.5,
   "static_rotation_threshold_degrees": 0.25

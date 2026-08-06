@@ -11,6 +11,8 @@ sys.path[:0] = [str(ROOT / "v2" / "src"), str(ROOT / "v3" / "src"), str(ROOT / "
 
 from mpm_dino_v4.v43_rotation_contact_adapter import VARIANTS, train_contact_adapter  # noqa: E402
 
+MVP_VARIANTS = ("physical_only", "contact_torque_basis", "contact_shuffled")
+
 
 def main(args):
     matrix = json.loads(args.matrix.read_text())
@@ -46,7 +48,7 @@ if __name__ == "__main__":
     parser.add_argument("--runs", type=Path, default=Path("v43/run/no_memory_contact_rotation"))
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--seeds", nargs="+", type=int, default=[42, 123, 456])
-    parser.add_argument("--variants", nargs="+", choices=VARIANTS, default=list(VARIANTS))
+    parser.add_argument("--variants", nargs="+", choices=VARIANTS, default=list(MVP_VARIANTS))
     parser.add_argument("--epochs", type=int, default=120)
     parser.add_argument("--draws", type=int, default=40)
     parser.add_argument("--lr", type=float, default=2e-4)

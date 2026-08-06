@@ -18,18 +18,21 @@ The objective balances frames with target rotation >=0.5 degrees against a
 separate false-rotation penalty below 0.25 degrees, plus residual smoothness.
 Natural-distribution validation remains the selection/reporting metric.
 
-Matched variants, seeds 42/123/456:
+MVP matched variants, seeds 42/123/456:
 
 1. `physical_only`: pointwise frozen physical features; all condition channels zero.
-2. `pooled_contact`: reproduction of the failed global contact interface.
-3. `pointwise_contact`: exact 15-channel deformation condition, pointwise.
-4. `contact_lever`: pointwise condition plus normalized lever arm.
-5. `contact_torque_basis`: recommended full interface, adding `r x n`.
-6. `contact_shuffled`: full interface with contact+curvature shuffled across points while event time stays synchronized.
-7. `zero_event_time`: full interface with the eight temporal channels zero.
+2. `contact_torque_basis`: recommended full interface: exact pointwise
+   15-channel deformation condition plus normalized lever arm and `r x n`.
+3. `contact_shuffled`: full interface with contact+curvature shuffled across
+   points while event time stays synchronized.
 
-Promotion requires the full interface to beat physical-only, pooled contact,
-pointwise contact, shuffled contact and zero-event-time in every seed for both
-families; reduce static/H1 error; preserve H59; and keep protected outputs
-bit-identical. Oracle contact makes this an information-sufficiency experiment,
-not a deployable model. Test remains sealed.
+The code retains intermediate diagnostic variants, but they are outside this
+frozen MVP and must not be launched initially. If the full interface does not
+beat both controls, stop. If it succeeds across all seeds and families, a later
+small attribution follow-up may separate pointwise contact, lever arm and event
+time.
+
+Promotion requires the full interface to beat physical-only and shuffled
+contact in every seed for both families; reduce static/H1 error; preserve H59;
+and keep protected outputs bit-identical. Oracle contact makes this an
+information-sufficiency experiment, not a deployable model. Test remains sealed.
