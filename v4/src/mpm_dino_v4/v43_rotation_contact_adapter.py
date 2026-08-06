@@ -164,9 +164,14 @@ def run_epoch(model, base, loader, builder, device, variant, seed, optimizer=Non
     context = torch.enable_grad() if training else torch.no_grad()
     with context:
         for raw in loader:
+            # Curvature uses a batched 3x3 eigendecomposition for every point.
+            # Building the fixed condition on CPU avoids a disproportionately
+            # large CUDA solver workspace allocation (~262 MiB for N=2048).
+            _, raw_stages = _batch_targets_and_stages(raw)
+            condition = builder(raw, raw_stages)
             batch = move(raw, device)
             targets, stages = _batch_targets_and_stages(batch)
-            condition = builder(batch, stages)
+            condition = condition.to(device, non_blocking=True)
             with torch.no_grad():
                 base_output = base(**{**{k: batch[k] for k in MODEL_INPUT_KEYS},
                                       "oracle_condition": condition})
@@ -206,9 +211,11 @@ def train_contact_adapter(root, manifest, champion, output, seed, variant, *, de
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     builder = DirectProbeConditionBuilder(True)
     # Cache a protected output, not only parameters.
-    fixed_raw = next(iter(val_loader)); fixed = move(fixed_raw, device)
+    fixed_raw = next(iter(val_loader))
+    _, fixed_stages_cpu = _batch_targets_and_stages(fixed_raw)
+    fixed_condition = builder(fixed_raw, fixed_stages_cpu).to(device, non_blocking=True)
+    fixed = move(fixed_raw, device)
     fixed_targets, fixed_stages = _batch_targets_and_stages(fixed)
-    fixed_condition = builder(fixed, fixed_stages)
     with torch.no_grad():
         fixed_before = base(**{**{k: fixed[k] for k in MODEL_INPUT_KEYS},
                                "oracle_condition": fixed_condition})
