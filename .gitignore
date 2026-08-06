@@ -3,6 +3,13 @@
 **/__pycache__/
 *.py[cod]
 
+# Local experiment outputs and packaged datasets. Runner source files such as
+# run_gate2.py remain trackable because these rules match directories only.
+**/run/
+**/runs/
+**/dataset/
+**/datasets/
+
 # Large generated/local data. Keep split manifests and selected reports tracked.
 data/shared/dino/
 data/v1/cache/
@@ -35,3 +42,6 @@ v3/artifacts/**/*.mp4
 # V4 fixed-graph caches and model blobs are reproducible from tracked manifests.
 v4/cache/
 v4/runs/**/*.pt
+
+# Material-inference experiment outputs.
+material_infer/outputs/
