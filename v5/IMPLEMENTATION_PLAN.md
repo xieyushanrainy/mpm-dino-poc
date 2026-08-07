@@ -51,15 +51,17 @@ Acceptance checks:
 
 ## 3. Implement factorized global motion
 
-Implement the ballistic COM function, randomly initialized residual COM head,
-proper-SO(3) rotation head and identity fallback. Expose rigid future positions
-as a detached interface for the interaction stage.
+Implement one randomly initialized V4.2-class physical trunk shared by the
+ballistic-residual COM head and proper-SO(3) rotation head. Train the trunk from
+both global losses and retain identity as the rotation fallback. Expose rigid
+future positions as a detached interface for the interaction stage.
 
 Acceptance checks:
 
 - zero COM residual reproduces the analytic ballistic path;
 - predicted rotations are proper rotations;
 - identity and learned rotation share the same evaluation path;
+- the joint COM and rotation losses both reach the shared trunk;
 - freezing prevents parameter and output changes downstream.
 
 ## 4. Implement the learned interaction representation
@@ -86,7 +88,9 @@ audited event-amplitude-normalized objective and metric implementation.
 Acceptance checks:
 
 - predicted deformation has zero pointwise mean per frame;
-- no deformation gradient reaches earlier stages;
+- the default arm sends no deformation gradient into earlier stages;
+- a declared nonzero gradient scale reaches only the shared physical trunk,
+  while COM/rotation heads and interaction remain protected;
 - zero prediction scores approximately one under the primary objective;
 - the three-seed aggregation applies the strict and inclusive thresholds
   exactly as specified.
@@ -126,8 +130,9 @@ Acceptance checks:
 
 1. Review and freeze all planning defaults in a versioned matrix config.
 2. Run Gate 0 integrity tests.
-3. Train and freeze COM for all three seeds.
-4. Train rotation for all seeds; make the global identity fallback decision.
+3. Jointly train the shared physical trunk, COM head and rotation head for all
+   three seeds.
+4. Compare learned rotation with identity and make the global fallback decision.
 5. Train and freeze the interaction encoder for all seeds.
 6. Train and evaluate the standalone causal deformation base.
 7. Stop on failure or base success according to the thresholds.

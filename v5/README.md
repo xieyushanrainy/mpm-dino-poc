@@ -51,13 +51,16 @@ The optional memory branch is disabled by default. After the causal base is
 formally eligible, rebuild its restricted bank with `build-bank`, set
 `memory.enabled` to `true` in a copied config, and train the `memory` stage.
 
-## COM v2 correction
+## Shared physical v3 correction
 
-The initial V5 COM simplification was rejected after matched evaluation. The
-current `V5COMModel` restores a randomly initialized V4.2-class pointwise
-graph/temporal physical trunk and the position/velocity/acceleration/key-horizon
-COM objective. Its checkpoint contract is `v5_physical_com_v2`; loaders reject
-the earlier simplified COM checkpoints. Train it into the non-overwriting
-`v5/run/com_physical_v2` directory with `v5/run_com_physical_v2.csh`. Rotation
-is independent and may reuse the previously promoted checkpoints, but
-interaction and deformation must be retrained on the corrected COM trajectory.
+The independent COM/rotation implementation is superseded. `V5SharedPhysicalModel`
+restores the V4.2-class pointwise graph/temporal trunk and trains it jointly from
+the COM and rotation losses, while retaining ballistic-plus-residual COM and an
+identity rotation baseline. Its contract is `v5_shared_physical_v3`; no V4 or
+older V5 weights are loaded. Start the three-seed global run with
+`v5/run_shared_global_v3.csh`.
+
+Interaction freezes the promoted shared-global checkpoint. Deformation freezes
+it by default (`--trunk-gradient-scale 0`), but a separately named experimental
+arm may pass a value in `(0, 1]` to fine-tune the shared trunk through a scaled
+gradient. COM and rotation head weights remain protected in either case.

@@ -13,7 +13,8 @@ and `456`; selection uses validation only and test remains sealed.
 - Random initialization for all V5 neural components; no V4 weights.
 - Dataset and split fixed to the V4.1 manifest hash in `DESIGN.md`.
 - Identical preprocessing, sampling budget and stopping policy within a stage.
-- Stage checkpoints are selected by their own metric and frozen downstream.
+- COM and rotation jointly update one shared physical trunk. It is frozen
+  downstream except in an explicitly named deformation fine-tuning arm.
 - Soft samples train deformation; rigid and soft samples train global motion.
 - Primary deformation metric: event-amplitude-normalized canonical MSE.
 - Every result records seed, UID breakdown, configuration, checkpoint hashes
@@ -25,12 +26,13 @@ and `456`; selection uses validation only and test remains sealed.
 |---|---|---|---|---|
 | 0 | Integrity audit | None | Split hash, sealed-test check, causal feature provenance, canonical-target invariants | All checks pass |
 | 1A | Ballistic COM | None | Analytic baseline | Report baseline |
-| 1B | Ballistic + residual COM | COM residual | Compare with 1A using COM trajectory error | Select own best checkpoint, then freeze |
+| 1B/2B | Shared learned global motion | Shared trunk, COM residual and rotation head | Report COM and rotation metrics separately; compare rotation with identity | Select one joint checkpoint per seed, then make the global rotation fallback decision |
 | 2A | Identity rotation | None | Required rotation baseline | Report three-seed mean |
 | 2B | Learned rotation | Rotation head | Compare with 2A using SO(3) geodesic error | Adopt globally only if three-seed mean beats identity; otherwise freeze identity |
 | 3 | Pointwise interaction | Interaction encoder plus auxiliary heads | Contact and event-time auxiliary metrics; no analytic contact inputs | Select own best checkpoint, then freeze |
 | 4A | Zero deformation | None | Objective reference, expected near 1 | Report baseline |
 | 4B | Causal base | Deformation decoder on frozen 1/2/3 | Compare its three-seed mean with the prior two-seed reference `0.91098` | `< 0.91098` qualifies; `<= 0.7025` succeeds and stops; otherwise stop |
+| 4C | Shared-trunk fine-tune (optional) | Deformation decoder plus scaled gradients into shared trunk | Compare with 4B and report COM/rotation drift | Separate named arm; simplicity only breaks comparable-performance ties |
 | 5A | Zero memory | None | Frozen 4B output | Must reproduce 4B |
 | 5B | Compact memory | Bank tokenizer/reader and scalar gate | Top-3 DINO object retrieval, 32 tokens/source, causal phase interpolation | Final success if three-seed mean `<= 0.7025` |
 | 5C | Memory attribution | No retraining | Zero memory and zero/replaced query DINO object-selection ablations | Diagnostic; disclose direction and UID concentration |
@@ -47,13 +49,13 @@ prediction. Fail closed on any target-derived query feature.
 
 ### Gate 1: COM
 
-Train one residual COM model per seed from random initialization. Select by COM
-validation error only. Persist ballistic and residual outputs separately so the
-physics contribution remains auditable.
+Train one shared global model per seed from random initialization. COM and
+rotation losses jointly update its physical trunk. Persist ballistic and
+residual COM outputs separately so the physics contribution remains auditable.
 
 ### Gate 2: rotation
 
-Train one rotation head per seed from random initialization. Compare the
+Train the rotation head jointly with the shared trunk and COM head. Compare the
 three-seed mean with identity, then make one global choice. Do not choose
 identity for some seeds and learned rotation for others.
 
@@ -67,9 +69,11 @@ from all inference calls.
 
 ### Gate 4: standalone causal base
 
-Train only the deformation decoder on soft samples. COM, rotation and the
-interaction encoder must remain bit-identical. Evaluate all three seeds before
-applying the mean threshold. Memory is forbidden unless 4B strictly beats
+The default arm trains only the deformation decoder on soft samples. The
+optional 4C arm uses a predeclared scaled gradient into the shared trunk while
+keeping COM/rotation heads and interaction bit-identical, and reports induced
+global-motion drift. Evaluate all three seeds before applying the mean threshold.
+Memory is forbidden unless the selected causal base strictly beats
 `0.91098` and remains above `0.7025`.
 
 ### Gate 5: optional memory

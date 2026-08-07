@@ -63,9 +63,10 @@ x_hat[t,i] = c_hat[t] + R_hat[t] (q_i + d_hat[t,i])
 ```
 
 where `c_hat` is COM, `R_hat` is a proper rotation, `q` is centered reference
-geometry and `d_hat` is zero-mean canonical deformation. COM, rotation and
-deformation have separate targets, metrics, checkpoints and freeze boundaries.
-The deformation path may not hide global translation.
+geometry and `d_hat` is zero-mean canonical deformation. COM and rotation have
+separate heads and metrics but share one randomly initialized graph/temporal
+physical trunk, matching the V4.2 global-motion design. The deformation path
+may not hide global translation.
 
 ## 3. Architecture
 
@@ -78,16 +79,16 @@ c_hat[t] = c_ballistic[t] + delta_c[t]
 ```
 
 The residual head is trained from scratch using causal observations. The
-ballistic component is not learned. The COM checkpoint is selected by its own
-validation COM metric and then frozen.
+ballistic component is not learned. During the global-motion stage, the COM
+loss and rotation loss jointly update the shared physical trunk.
 
 ### 3.2 Rotation stage
 
-A proper-SO(3) rotation head is trained from scratch and selected by validation
+A proper-SO(3) rotation head is trained jointly with COM from scratch and selected by validation
 geodesic error. Identity is the required baseline. Learned rotation is adopted
 only if its three-seed mean beats identity; the learned-versus-identity choice
 is global across seeds. Otherwise V5 falls back to identity and deformation
-work continues. The selected rotation path is frozen.
+work continues. Global checkpoints contain the shared trunk plus both heads.
 
 ### 3.3 Learned pointwise interaction stage
 
@@ -126,8 +127,12 @@ d_base[t,i] = zero_mean(deformation_decoder(q_i, z[t,i]))
 ```
 
 The primary loss and checkpoint metric are event-amplitude-normalized canonical
-deformation MSE. The frozen COM, selected rotation and interaction encoder may
-not be fine-tuned by this stage.
+deformation MSE. The default arm freezes the shared physical trunk, COM and
+rotation heads, and interaction encoder. A separately named controlled arm may
+set `trunk_gradient_scale` in `(0, 1]`, using the V4 local-gradient construction
+`h.detach() + alpha * (h - h.detach())`. This lets deformation fine-tune the
+shared trunk while COM and rotation head parameters remain frozen. Such an arm
+must report COM and rotation drift and cannot silently replace the frozen arm.
 
 Promotion rules over seeds 42, 123 and 456:
 
@@ -173,18 +178,21 @@ validation sweep.
 
 ## 4. Stagewise freezing and selection
 
-Training is explicitly staged. Each promoted stage is immutable during all
-later stages and is chosen only by its own validation metric:
+Training is explicitly staged. Protected heads remain immutable. The shared
+trunk is frozen by default downstream, with only the declared deformation
+fine-tuning arm allowed to update it:
 
-1. COM: validation COM trajectory error.
-2. Rotation: validation SO(3) geodesic error, then global identity fallback.
+1. Shared global motion: joint COM and rotation training; report validation COM
+   trajectory error and SO(3) geodesic error separately.
+2. Rotation decision: global learned-versus-identity fallback.
 3. Interaction: validation contact and event-time auxiliary metrics.
 4. Causal deformation: validation event-normalized canonical MSE.
 5. Optional memory: validation event-normalized canonical MSE.
 
 Earlier checkpoints must not be retrospectively selected for downstream
-deformation performance. Protected-path output and parameter hashes are checked
-before and after every later stage.
+deformation performance. Protected-head parameter hashes are checked before
+and after every later stage. A trunk-fine-tuned deformation checkpoint is a new
+named branch and must additionally measure global-motion output drift.
 
 ## 5. Evaluation and reporting
 

@@ -6,6 +6,7 @@ from mpm_dino_v5.model import (
     V5DeformationDecoder,
     V5InteractionEncoder,
     V5RotationModel,
+    V5SharedPhysicalModel,
     ballistic_com,
 )
 
@@ -98,3 +99,37 @@ def test_identity_rotation_path_is_exact_identity():
     output = model(**values, use_identity_rotation=True)
     expected = torch.eye(3).expand_as(output.rotation)
     assert torch.equal(output.rotation, expected)
+
+
+def test_shared_trunk_receives_both_com_and_rotation_gradients():
+    values = inputs(batch=1, points=16, frames=7)
+    model = V5SharedPhysicalModel(16, 7, 0, 1, 4)
+    torch.nn.init.normal_(model.core.v42_com_head[-1].weight, std=1e-3)
+    torch.nn.init.normal_(model.core.rotation_head[-1].weight, std=1e-3)
+    output = model(**values)
+    (output.com.square().mean() + output.rotation[..., 0, 1].square().mean()).backward()
+    trunk_grad = sum(
+        float(parameter.grad.abs().sum()) for parameter in model.trunk_parameters()
+        if parameter.grad is not None
+    )
+    assert trunk_grad > 0
+    assert model.core.v42_com_head[-1].weight.grad.abs().sum() > 0
+    assert model.core.rotation_head[-1].weight.grad.abs().sum() > 0
+
+
+def test_deformation_physical_gradient_scale_can_freeze_or_finetune_trunk():
+    decoder = V5DeformationDecoder(
+        interaction_dim=8, hidden_dim=16, blocks=1, dropout=0,
+        physical_dim=6,
+    )
+    shape = torch.randn(1, 10, 3)
+    mask = torch.ones(1, 10, dtype=torch.bool)
+    latent = torch.randn(1, 4, 10, 8)
+    physical = torch.randn(1, 4, 10, 6, requires_grad=True)
+    frozen = decoder(shape, latent, mask, physical, trunk_gradient_scale=0)
+    frozen.square().sum().backward()
+    assert physical.grad is None or torch.count_nonzero(physical.grad) == 0
+    physical.grad = None
+    tuned = decoder(shape, latent, mask, physical, trunk_gradient_scale=.25)
+    tuned.square().sum().backward()
+    assert physical.grad is not None and physical.grad.abs().sum() > 0

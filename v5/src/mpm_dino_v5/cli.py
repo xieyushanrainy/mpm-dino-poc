@@ -14,6 +14,9 @@ from .training import (
     train_interaction,
     train_memory,
     train_rotation,
+    train_shared_deformation,
+    train_shared_global,
+    train_shared_interaction,
 )
 
 
@@ -51,7 +54,10 @@ def main(argv=None):
     bank.add_argument("--seed", type=int, default=42, choices=(42, 123, 456))
 
     train = sub.add_parser("train", help="train one explicitly selected V5 stage")
-    train.add_argument("stage", choices=("com", "rotation", "interaction", "deformation", "memory"))
+    train.add_argument("stage", choices=(
+        "shared-global", "shared-interaction", "shared-deformation",
+        "com", "rotation", "interaction", "deformation", "memory",
+    ))
     train.add_argument("--dataset", required=True)
     train.add_argument("--manifest", required=True)
     train.add_argument("--output", required=True)
@@ -69,6 +75,8 @@ def main(argv=None):
     train.add_argument("--interaction-checkpoint")
     train.add_argument("--deformation-checkpoint")
     train.add_argument("--bank")
+    train.add_argument("--global-checkpoint")
+    train.add_argument("--trunk-gradient-scale", type=float, default=0.0)
     train.add_argument("--identity-rotation", action="store_true")
 
     args = parser.parse_args(argv)
@@ -95,7 +103,22 @@ def main(argv=None):
     manifest = load_manifest(args.manifest)
     common = (args.dataset, manifest, args.output, args.seed)
     keyword = {"config": config, "options": _options(args), "device": args.device}
-    if args.stage == "com":
+    if args.stage == "shared-global":
+        score = train_shared_global(*common, **keyword)
+    elif args.stage == "shared-interaction":
+        if not args.global_checkpoint:
+            parser.error("shared-interaction requires --global-checkpoint")
+        score = train_shared_interaction(
+            *common, args.global_checkpoint, **keyword,
+        )
+    elif args.stage == "shared-deformation":
+        if not args.global_checkpoint or not args.interaction_checkpoint:
+            parser.error("shared-deformation requires global and interaction checkpoints")
+        score = train_shared_deformation(
+            *common, args.global_checkpoint, args.interaction_checkpoint,
+            trunk_gradient_scale=args.trunk_gradient_scale, **keyword,
+        )
+    elif args.stage == "com":
         score = train_com(*common, **keyword)
     elif args.stage == "rotation":
         score = train_rotation(*common, **keyword)

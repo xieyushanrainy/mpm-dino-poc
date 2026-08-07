@@ -92,6 +92,38 @@ class V5COMModel(nn.Module):
         return output.com, output.ballistic_com
 
 
+class V5SharedPhysicalModel(nn.Module):
+    """One V4.2-class trunk shared by COM, rotation, and local mechanics."""
+
+    contract_version = "v5_shared_physical_v3"
+
+    def __init__(self, hidden_dim: int = 128, frames: int = 59, dropout: float = 0.1, blocks: int = 4, heads: int = 4):
+        super().__init__()
+        self.frames = frames
+        self.hidden_dim = hidden_dim
+        self.core = V42RotationAwareSurrogate(
+            local_mode="zero", hidden_dim=hidden_dim, blocks=blocks,
+            heads=heads, dropout=dropout, frames=frames,
+            local_trunk_alpha=0.0, gradient_checkpointing=True,
+            rotation_parameterization="6d", rotation_attention=False,
+            rotation_dynamics=False,
+        )
+
+    def forward(self, **inputs):
+        missing = set(MODEL_INPUT_KEYS) - inputs.keys()
+        if missing:
+            raise ValueError(f"shared physical input is missing {sorted(missing)}")
+        return self.core(**{key: inputs[key] for key in MODEL_INPUT_KEYS})
+
+    def trunk_parameters(self):
+        prefixes = ("initial_node.", "initial_graph.", "time_projection.", "token.", "blocks.")
+        return [parameter for name, parameter in self.core.named_parameters() if name.startswith(prefixes)]
+
+    def global_head_parameters(self):
+        prefixes = ("v42_com_head.", "rotation_head.")
+        return [parameter for name, parameter in self.core.named_parameters() if name.startswith(prefixes)]
+
+
 class V5RotationModel(nn.Module):
     def __init__(self, hidden_dim: int = 128, frames: int = 59, dropout: float = 0.1):
         super().__init__()
@@ -140,22 +172,30 @@ class InteractionOutput:
 class V5InteractionEncoder(nn.Module):
     """Learned pointwise conditioning without analytic gap/proximity features."""
 
-    def __init__(self, hidden_dim: int = 128, blocks: int = 4, dropout: float = 0.1):
+    contract_version = "v5_shared_interaction_v3"
+
+    def __init__(self, hidden_dim: int = 128, blocks: int = 4, dropout: float = 0.1, physical_dim: int = 0):
         super().__init__()
-        self.input = nn.Linear(10, hidden_dim)
+        self.physical_dim = int(physical_dim)
+        self.input = nn.Linear(10 + self.physical_dim, hidden_dim)
         self.blocks = nn.ModuleList(ResidualBlock(hidden_dim, dropout) for _ in range(blocks))
         self.contact_head = nn.Sequential(nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, 1))
         self.time_head = nn.Sequential(
             nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, hidden_dim), nn.SiLU(), nn.Linear(hidden_dim, 1), nn.Tanh(),
         )
 
-    def forward(self, reference_shape: Tensor, rigid_position: Tensor, point_mask: Tensor, floor_z: Tensor) -> InteractionOutput:
+    def forward(self, reference_shape: Tensor, rigid_position: Tensor, point_mask: Tensor, floor_z: Tensor, physical_hidden: Tensor | None = None) -> InteractionOutput:
         radius = torch.linalg.vector_norm(reference_shape, dim=-1).masked_fill(~point_mask, 0).amax(1).clamp_min(1e-6)
         q = reference_shape / radius[:, None, None]
         rigid = rigid_position / radius[:, None, None, None]
         floor = floor_z[:, None, None, None].expand(*rigid.shape[:-1], 1) / radius[:, None, None, None]
         q_time = q[:, None].expand(-1, rigid.shape[1], -1, -1)
-        value = self.input(torch.cat((q_time, rigid, floor, q_time * rigid), -1))
+        features = [q_time, rigid, floor, q_time * rigid]
+        if self.physical_dim:
+            if physical_hidden is None or physical_hidden.shape[-1] != self.physical_dim:
+                raise ValueError("shared physical_hidden is required by the interaction encoder")
+            features.append(physical_hidden)
+        value = self.input(torch.cat(features, -1))
         mask = point_mask[:, None, :, None].to(value.dtype)
         value = value * mask
         for block in self.blocks:
@@ -167,17 +207,30 @@ class V5InteractionEncoder(nn.Module):
 
 
 class V5DeformationDecoder(nn.Module):
-    def __init__(self, interaction_dim: int = 128, hidden_dim: int = 128, blocks: int = 4, dropout: float = 0.1):
+    contract_version = "v5_shared_deformation_v3"
+
+    def __init__(self, interaction_dim: int = 128, hidden_dim: int = 128, blocks: int = 4, dropout: float = 0.1, physical_dim: int = 0):
         super().__init__()
-        self.input = nn.Linear(interaction_dim + 3, hidden_dim)
+        self.physical_dim = int(physical_dim)
+        self.input = nn.Linear(interaction_dim + self.physical_dim + 3, hidden_dim)
         self.blocks = nn.ModuleList(ResidualBlock(hidden_dim, dropout) for _ in range(blocks))
         self.output = nn.Sequential(nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, 3))
 
-    def forward(self, reference_shape: Tensor, latent: Tensor, point_mask: Tensor) -> Tensor:
+    def forward(self, reference_shape: Tensor, latent: Tensor, point_mask: Tensor, physical_hidden: Tensor | None = None, trunk_gradient_scale: float = 0.0) -> Tensor:
         radius = torch.linalg.vector_norm(reference_shape, dim=-1).masked_fill(~point_mask, 0).amax(1).clamp_min(1e-6)
         q = (reference_shape / radius[:, None, None])[:, None].expand(-1, latent.shape[1], -1, -1)
         mask = point_mask[:, None, :, None].to(latent.dtype)
-        value = self.input(torch.cat((q, latent), -1)) * mask
+        features = [q, latent]
+        if self.physical_dim:
+            if physical_hidden is None or physical_hidden.shape[-1] != self.physical_dim:
+                raise ValueError("shared physical_hidden is required by the deformation decoder")
+            if not 0 <= trunk_gradient_scale <= 1:
+                raise ValueError("trunk_gradient_scale must lie in [0,1]")
+            physical = physical_hidden.detach() + trunk_gradient_scale * (
+                physical_hidden - physical_hidden.detach()
+            )
+            features.append(physical)
+        value = self.input(torch.cat(features, -1)) * mask
         for block in self.blocks:
             value = block(value) * mask
         raw = self.output(value) * radius[:, None, None, None] * mask

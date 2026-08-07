@@ -12,6 +12,7 @@ from torch import Tensor, nn
 from torch.utils.data import DataLoader
 
 from mpm_dino_v4.v41_data import UIDBalancedSampler
+from mpm_dino_v4.v42_losses import compute_v42_global_losses
 
 from .config import V5Config
 from .data import dataset, interaction_labels, model_inputs, targets_and_stages
@@ -27,6 +28,7 @@ from .model import (
     V5DeformationDecoder,
     V5InteractionEncoder,
     V5RotationModel,
+    V5SharedPhysicalModel,
     centered_reference,
     reconstruct_positions,
 )
@@ -154,6 +156,43 @@ def build_modules(config: V5Config, device="cpu"):
     )
 
 
+def build_shared_modules(config: V5Config, device="cpu"):
+    config.validate()
+    values = config.model
+    return (
+        V5SharedPhysicalModel(
+            values.hidden_dim, values.frames, values.dropout,
+            values.blocks, values.heads,
+        ).to(device),
+        V5InteractionEncoder(
+            values.interaction_dim, values.blocks, values.dropout,
+            physical_dim=values.hidden_dim,
+        ).to(device),
+        V5DeformationDecoder(
+            values.interaction_dim, values.hidden_dim, values.blocks,
+            values.dropout, physical_dim=values.hidden_dim,
+        ).to(device),
+    )
+
+
+class SharedDeformationStage(nn.Module):
+    contract_version = "v5_shared_deformation_stage_v3"
+
+    def __init__(self, physical, interaction, decoder, trunk_gradient_scale):
+        super().__init__()
+        self.physical = physical
+        self.interaction = interaction
+        self.decoder = decoder
+        self.trunk_gradient_scale = float(trunk_gradient_scale)
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+        self.interaction.eval()
+        if not mode or self.trunk_gradient_scale == 0:
+            self.physical.eval()
+        return self
+
+
 def load_v5_stage(module: nn.Module, path: str | Path, expected_stage: str, device="cpu") -> dict:
     state = torch.load(path, map_location=device, weights_only=False)
     if state.get("contract") != "v5_random_initialization_stage_v1" or state.get("stage") != expected_stage:
@@ -183,6 +222,113 @@ def train_com(root, manifest, output, seed, config=V5Config(), options=TrainOpti
         ).total
 
     return _fit("com", com, train_loader, validation_loader, device, step, Path(output), seed, config, options)
+
+
+def train_shared_global(root, manifest, output, seed, config=V5Config(), options=TrainOptions(), device="cpu"):
+    """Jointly update one trunk from both COM and rotation objectives."""
+    seed_all(seed)
+    device = torch.device(device)
+    train_loader, validation_loader = loaders(
+        root, manifest, seed, ("rigid", "soft_body"), options,
+    )
+    physical, _, _ = build_shared_modules(config, device)
+
+    def step(batch):
+        targets, _ = targets_and_stages(batch)
+        output_value = physical(**model_inputs(batch))
+        return compute_v42_global_losses(output_value, batch, targets).total
+
+    return _fit(
+        "shared_global", physical, train_loader, validation_loader, device,
+        step, Path(output), seed, config, options,
+    )
+
+
+def train_shared_interaction(root, manifest, output, seed, global_checkpoint, config=V5Config(), options=TrainOptions(), device="cpu"):
+    seed_all(seed)
+    device = torch.device(device)
+    train_loader, validation_loader = loaders(root, manifest, seed, ("soft_body",), options)
+    physical, interaction, _ = build_shared_modules(config, device)
+    load_v5_stage(physical, global_checkpoint, "shared_global", device)
+    freeze(physical)
+
+    def step(batch):
+        targets, stages = targets_and_stages(batch)
+        with torch.no_grad():
+            global_output = physical(**model_inputs(batch))
+            reference_shape, _, _ = centered_reference(
+                batch["x1"], batch["input_mask"],
+            )
+            contact, event_time, event_valid = interaction_labels(batch, targets, stages)
+        result = interaction(
+            reference_shape, global_output.position,
+            batch["input_mask"], batch["floor_z"],
+            global_output.physical_hidden,
+        )
+        return interaction_auxiliary_loss(
+            result.contact_logits, result.event_time, contact, event_time,
+            batch["input_mask"], event_valid,
+        ).total
+
+    return _fit(
+        "shared_interaction", interaction, train_loader, validation_loader,
+        device, step, Path(output), seed, config, options,
+        (("shared_physical", physical),),
+    )
+
+
+def train_shared_deformation(root, manifest, output, seed, global_checkpoint, interaction_checkpoint, trunk_gradient_scale=0.0, config=V5Config(), options=TrainOptions(), device="cpu"):
+    if not 0 <= trunk_gradient_scale <= 1:
+        raise ValueError("trunk_gradient_scale must lie in [0,1]")
+    seed_all(seed)
+    device = torch.device(device)
+    train_loader, validation_loader = loaders(root, manifest, seed, ("soft_body",), options)
+    physical, interaction, decoder = build_shared_modules(config, device)
+    load_v5_stage(physical, global_checkpoint, "shared_global", device)
+    load_v5_stage(interaction, interaction_checkpoint, "shared_interaction", device)
+    freeze(physical); freeze(interaction)
+    if trunk_gradient_scale > 0:
+        for parameter in physical.trunk_parameters():
+            parameter.requires_grad_(True)
+    stage = SharedDeformationStage(
+        physical, interaction, decoder, trunk_gradient_scale,
+    ).to(device)
+
+    def step(batch):
+        targets, stages = targets_and_stages(batch)
+        global_output = physical(**model_inputs(batch))
+        reference_shape, _, _ = centered_reference(
+            batch["x1"], batch["input_mask"],
+        )
+        # The shared physical model's local output is zero, so position is the
+        # causal rigid trajectory produced by its COM and rotation paths.
+        interaction_output = interaction(
+            reference_shape, global_output.position.detach(),
+            batch["input_mask"], batch["floor_z"],
+            global_output.physical_hidden.detach(),
+        )
+        predicted = decoder(
+            reference_shape, interaction_output.latent,
+            batch["input_mask"], global_output.physical_hidden,
+            trunk_gradient_scale=trunk_gradient_scale,
+        )
+        return event_normalized_deformation_mse(
+            predicted, targets.displacement, batch["target_mask"],
+            targets.valid_rotation, stages.labels[:, 1:], targets.radius,
+        )
+
+    protected = (("interaction", interaction),)
+    if trunk_gradient_scale == 0:
+        protected += (("shared_physical", physical),)
+    else:
+        protected += (
+            ("com_head", physical.core.v42_com_head),
+            ("rotation_head", physical.core.rotation_head),
+        )
+    return _fit(
+        "shared_deformation", stage, train_loader, validation_loader, device,
+        step, Path(output), seed, config, options, protected,
+    )
 
 
 def train_rotation(root, manifest, output, seed, config=V5Config(), options=TrainOptions(), device="cpu"):
