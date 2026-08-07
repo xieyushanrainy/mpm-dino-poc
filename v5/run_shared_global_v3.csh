@@ -3,14 +3,18 @@
 # V5 shared physical v3: jointly train the COM and rotation heads and their
 # V4.2-class physical trunk. All neural weights start from random initialization.
 
-set PYTHON = .venv-v41/bin/python
+if ($?CONDA_PREFIX && -x "$CONDA_PREFIX/bin/python") then
+  set PYTHON = "$CONDA_PREFIX/bin/python"
+else
+  set PYTHON = .venv-v41/bin/python
+endif
 set DATASET = v41/dataset
 set MANIFEST = v41/manifests/v41_uid_splits.json
 set CONFIG = v5/config.default.json
 set RUNS = v5/run/shared_v3/global
 
 if (! -x "$PYTHON") then
-  echo "ERROR: Python environment not found or not executable: $PYTHON"
+  echo "ERROR: activate conda env mpm-dino-poc or provide .venv-v41/bin/python"
   exit 1
 endif
 if (! -d "$DATASET") then
@@ -29,6 +33,20 @@ endif
 mkdir -p "$RUNS"
 if ($status != 0) exit 1
 setenv PYTHONPATH ".:v2/src:v4/src:v5/src"
+setenv PYTORCH_CUDA_ALLOC_CONF "expandable_segments:True"
+
+# This 2,048-point, 59-frame model needs several GiB free at peak. A GPU with
+# only hundreds of MiB available will fail even though the model parameters fit.
+which nvidia-smi >& /dev/null
+if ($status == 0) then
+  set FREE_MIB = `nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits -i 0 | head -1`
+  if ($FREE_MIB < 3072) then
+    echo "ERROR: GPU 0 has only ${FREE_MIB} MiB free; shared-global requires at least 3072 MiB before launch."
+    echo "Use an unoccupied GPU or stop the process holding its memory."
+    nvidia-smi
+    exit 1
+  endif
+endif
 
 $PYTHON -m mpm_dino_v5.cli audit "$MANIFEST"
 if ($status != 0) then

@@ -283,7 +283,13 @@ class V41TrajectorySurrogate(nn.Module):
         edge_features=torch.cat((rest_edge_vectors[:,None].expand(-1,t,-1,-1,-1),vec,leng,leng/rest_edge_lengths[:,None,:,:,None].clamp_min(1e-8)-1),-1)
         visual=self.dino_projection(dino,dino_valid)
         for i, block in enumerate(self.blocks):
-            hidden=block(hidden,edge_features,neighbour_indices,edge_mask,input_mask)
+            if self.gradient_checkpointing and self.training:
+                hidden = checkpoint(
+                    block, hidden, edge_features, neighbour_indices,
+                    edge_mask, input_mask, use_reentrant=False,
+                )
+            else:
+                hidden=block(hidden,edge_features,neighbour_indices,edge_mask,input_mask)
             if self.mechanism in {"m1","m2"}:
                 hidden=self.visual[i](hidden,visual,dino_valid,neighbour_indices,neighbour_mask,rest_edge_vectors)
         if self.mechanism=="m6":

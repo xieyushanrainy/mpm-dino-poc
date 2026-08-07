@@ -11,11 +11,13 @@ current project status.
 Read in this order:
 
 1. [`V42_EXPERIMENT_SUMMARY.md`](V42_EXPERIMENT_SUMMARY.md)
-2. [`checkpoints/MANIFEST.json`](checkpoints/MANIFEST.json)
-3. [`CONTEXT.md`](CONTEXT.md)
-4. [`PLAN.md`](PLAN.md)
-5. [`ROTATION_EXPERIMENT_RESULTS.md`](ROTATION_EXPERIMENT_RESULTS.md)
-6. [`GATE2_HANDOVER_PROMPT.md`](GATE2_HANDOVER_PROMPT.md) (historical)
+2. [`V42_SLACK_CANVAS_SUMMARY.md`](V42_SLACK_CANVAS_SUMMARY.md) — copy-ready
+   architecture/experiment closeout
+3. [`checkpoints/MANIFEST.json`](checkpoints/MANIFEST.json)
+4. [`CONTEXT.md`](CONTEXT.md)
+5. [`PLAN.md`](PLAN.md)
+6. [`ROTATION_EXPERIMENT_RESULTS.md`](ROTATION_EXPERIMENT_RESULTS.md)
+7. [`GATE2_HANDOVER_PROMPT.md`](GATE2_HANDOVER_PROMPT.md) (historical)
 
 Implementation scaffolding now lives in `v4/src/mpm_dino_v4/v42_*.py`.
 It provides rotation-aware targets, protected global/local gradient routing,

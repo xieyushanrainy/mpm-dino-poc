@@ -375,7 +375,12 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
             if projected.ndim == 3:
                 projected = projected[:, :, None]
             protected = protected + projected
-        if self.oracle_condition_dim and self.oracle_injection == "direct":
+        if self.local_mode == "zero":
+            # The global-only model does not consume region tokens. Avoid the
+            # otherwise dead attention branch; PyTorch MPS 2.8 aborts inside
+            # that kernel for the batch-one staged-training shape.
+            local_hidden = protected
+        elif self.oracle_condition_dim and self.oracle_injection == "direct":
             expected = (
                 protected.shape[0], self.frames, protected.shape[2],
                 self.oracle_condition_dim,
@@ -397,7 +402,7 @@ class V42RotationAwareSurrogate(V41TrajectorySurrogate):
             ), dim=-1))
         else:
             dino = inputs["dino"]
-            if self.local_mode in {"zero", "geometry"}:
+            if self.local_mode == "geometry":
                 dino = torch.zeros_like(dino)
             visual = self.dino_projection(dino, inputs["dino_valid"])
             regions = self.region_encoder(
