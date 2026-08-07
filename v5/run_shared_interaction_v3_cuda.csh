@@ -6,7 +6,7 @@ set PYTHON = .venv-v41/bin/python
 set DATASET = v41/dataset
 set MANIFEST = v41/manifests/v41_uid_splits.json
 set CONFIG = v5/config.default.json
-set GLOBAL_RUNS = v5/run/shared_v3/global_mps
+set GLOBAL_RUNS = v5/run/shared_v3/global
 set RUNS = v5/run/shared_v3/interaction_cuda
 
 if (! -x "$PYTHON") then
