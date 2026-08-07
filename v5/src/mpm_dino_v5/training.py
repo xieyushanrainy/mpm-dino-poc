@@ -108,7 +108,7 @@ def _run_batches(module, loader, device, step, optimizer=None, accumulation=4, m
     return total / max(count, 1)
 
 
-def _fit(stage: str, module: nn.Module, train_loader, validation_loader, device, step, output: Path, seed: int, config: V5Config, options: TrainOptions, protected=()):
+def _fit(stage: str, module: nn.Module, train_loader, validation_loader, device, step, output: Path, seed: int, config: V5Config, options: TrainOptions, protected=(), metadata=None):
     output.mkdir(parents=True, exist_ok=True)
     optimizer = _optimizer(module, options)
     protected_hashes = snapshot(protected)
@@ -133,6 +133,7 @@ def _fit(stage: str, module: nn.Module, train_loader, validation_loader, device,
                 "config": config.to_dict(),
                 "options": options.__dict__,
                 "protected": protected_hashes,
+                "metadata": dict(metadata or {}),
             }, output / "best.pt")
         else:
             bad_epochs += 1
@@ -244,7 +245,7 @@ def train_shared_global(root, manifest, output, seed, config=V5Config(), options
     )
 
 
-def train_shared_interaction(root, manifest, output, seed, global_checkpoint, config=V5Config(), options=TrainOptions(), device="cpu"):
+def train_shared_interaction(root, manifest, output, seed, global_checkpoint, use_identity_rotation=False, config=V5Config(), options=TrainOptions(), device="cpu"):
     seed_all(seed)
     device = torch.device(device)
     train_loader, validation_loader = loaders(root, manifest, seed, ("soft_body",), options)
@@ -259,9 +260,13 @@ def train_shared_interaction(root, manifest, output, seed, global_checkpoint, co
             reference_shape, _, _ = centered_reference(
                 batch["x1"], batch["input_mask"],
             )
+            rigid_position = (
+                global_output.com[:, :, None] + reference_shape[:, None]
+                if use_identity_rotation else global_output.position
+            )
             contact, event_time, event_valid = interaction_labels(batch, targets, stages)
         result = interaction(
-            reference_shape, global_output.position,
+            reference_shape, rigid_position,
             batch["input_mask"], batch["floor_z"],
             global_output.physical_hidden,
         )
@@ -274,10 +279,11 @@ def train_shared_interaction(root, manifest, output, seed, global_checkpoint, co
         "shared_interaction", interaction, train_loader, validation_loader,
         device, step, Path(output), seed, config, options,
         (("shared_physical", physical),),
+        {"rotation_policy": "identity" if use_identity_rotation else "learned"},
     )
 
 
-def train_shared_deformation(root, manifest, output, seed, global_checkpoint, interaction_checkpoint, trunk_gradient_scale=0.0, config=V5Config(), options=TrainOptions(), device="cpu"):
+def train_shared_deformation(root, manifest, output, seed, global_checkpoint, interaction_checkpoint, trunk_gradient_scale=0.0, use_identity_rotation=False, config=V5Config(), options=TrainOptions(), device="cpu"):
     if not 0 <= trunk_gradient_scale <= 1:
         raise ValueError("trunk_gradient_scale must lie in [0,1]")
     seed_all(seed)
@@ -300,10 +306,14 @@ def train_shared_deformation(root, manifest, output, seed, global_checkpoint, in
         reference_shape, _, _ = centered_reference(
             batch["x1"], batch["input_mask"],
         )
+        rigid_position = (
+            global_output.com[:, :, None] + reference_shape[:, None]
+            if use_identity_rotation else global_output.position
+        )
         # The shared physical model's local output is zero, so position is the
         # causal rigid trajectory produced by its COM and rotation paths.
         interaction_output = interaction(
-            reference_shape, global_output.position.detach(),
+            reference_shape, rigid_position.detach(),
             batch["input_mask"], batch["floor_z"],
             global_output.physical_hidden.detach(),
         )
@@ -328,6 +338,8 @@ def train_shared_deformation(root, manifest, output, seed, global_checkpoint, in
     return _fit(
         "shared_deformation", stage, train_loader, validation_loader, device,
         step, Path(output), seed, config, options, protected,
+        {"rotation_policy": "identity" if use_identity_rotation else "learned",
+         "trunk_gradient_scale": float(trunk_gradient_scale)},
     )
 
 

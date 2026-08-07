@@ -109,14 +109,16 @@ def main(argv=None):
         if not args.global_checkpoint:
             parser.error("shared-interaction requires --global-checkpoint")
         score = train_shared_interaction(
-            *common, args.global_checkpoint, **keyword,
+            *common, args.global_checkpoint,
+            use_identity_rotation=args.identity_rotation, **keyword,
         )
     elif args.stage == "shared-deformation":
         if not args.global_checkpoint or not args.interaction_checkpoint:
             parser.error("shared-deformation requires global and interaction checkpoints")
         score = train_shared_deformation(
             *common, args.global_checkpoint, args.interaction_checkpoint,
-            trunk_gradient_scale=args.trunk_gradient_scale, **keyword,
+            trunk_gradient_scale=args.trunk_gradient_scale,
+            use_identity_rotation=args.identity_rotation, **keyword,
         )
     elif args.stage == "com":
         score = train_com(*common, **keyword)
