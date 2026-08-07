@@ -50,3 +50,14 @@ No trainer accepts a V4 initialization checkpoint.
 The optional memory branch is disabled by default. After the causal base is
 formally eligible, rebuild its restricted bank with `build-bank`, set
 `memory.enabled` to `true` in a copied config, and train the `memory` stage.
+
+## COM v2 correction
+
+The initial V5 COM simplification was rejected after matched evaluation. The
+current `V5COMModel` restores a randomly initialized V4.2-class pointwise
+graph/temporal physical trunk and the position/velocity/acceleration/key-horizon
+COM objective. Its checkpoint contract is `v5_physical_com_v2`; loaders reject
+the earlier simplified COM checkpoints. Train it into the non-overwriting
+`v5/run/com_physical_v2` directory with `v5/run_com_physical_v2.csh`. Rotation
+is independent and may reuse the previously promoted checkpoints, but
+interaction and deformation must be retrained on the corrected COM trajectory.

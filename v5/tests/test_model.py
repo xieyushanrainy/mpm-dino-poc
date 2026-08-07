@@ -18,6 +18,15 @@ def inputs(batch=2, points=16, frames=7):
     x1[..., 2] -= .01
     mask = torch.ones(batch, points, dtype=torch.bool)
     mask[:, -2:] = False
+    indices = torch.stack((
+        (torch.arange(points) - 1) % points,
+        (torch.arange(points) + 1) % points,
+    ), -1)[None].expand(batch, -1, -1)
+    neighbours = torch.gather(
+        x1[:, None].expand(-1, points, -1, -1), 2,
+        indices[..., None].expand(-1, -1, -1, 3),
+    )
+    rest_vectors = neighbours - x1[:, :, None]
     return {
         "x0": x0,
         "x1": x1,
@@ -25,6 +34,13 @@ def inputs(batch=2, points=16, frames=7):
         "dt": torch.full((batch,), 1 / 30),
         "gravity": torch.tensor([[0., 0., -9.81]]).expand(batch, -1),
         "floor_z": torch.zeros(batch),
+        "reference": x1.clone(),
+        "dino": torch.zeros(batch, points, 384),
+        "dino_valid": mask.clone(),
+        "neighbour_indices": indices,
+        "neighbour_mask": mask[:, :, None].expand(-1, -1, 2).clone(),
+        "rest_edge_vectors": rest_vectors,
+        "rest_edge_lengths": torch.linalg.vector_norm(rest_vectors, dim=-1),
     }
 
 
@@ -41,7 +57,7 @@ def test_ballistic_com_uses_two_observations_and_gravity():
 def test_factorized_model_shapes_proper_rotation_and_zero_mean_deformation():
     values = inputs()
     model = V5CausalDeformationModel(
-        V5COMModel(hidden_dim=16, frames=7, dropout=0),
+        V5COMModel(hidden_dim=16, frames=7, dropout=0, blocks=1, heads=4),
         V5RotationModel(hidden_dim=16, frames=7, dropout=0),
         V5InteractionEncoder(hidden_dim=16, blocks=2, dropout=0),
         V5DeformationDecoder(interaction_dim=16, hidden_dim=16, blocks=2, dropout=0),
@@ -62,7 +78,7 @@ def test_factorized_model_shapes_proper_rotation_and_zero_mean_deformation():
 def test_inference_has_no_future_label_dependency():
     values = inputs(batch=1)
     model = V5CausalDeformationModel(
-        V5COMModel(16, 7, 0), V5RotationModel(16, 7, 0),
+        V5COMModel(16, 7, 0, 1, 4), V5RotationModel(16, 7, 0),
         V5InteractionEncoder(16, 1, 0), V5DeformationDecoder(16, 16, 1, 0),
     ).eval()
     with torch.no_grad():
@@ -76,10 +92,9 @@ def test_inference_has_no_future_label_dependency():
 def test_identity_rotation_path_is_exact_identity():
     values = inputs(batch=1)
     model = V5CausalDeformationModel(
-        V5COMModel(16, 7, 0), V5RotationModel(16, 7, 0),
+        V5COMModel(16, 7, 0, 1, 4), V5RotationModel(16, 7, 0),
         V5InteractionEncoder(16, 1, 0), V5DeformationDecoder(16, 16, 1, 0),
     )
     output = model(**values, use_identity_rotation=True)
     expected = torch.eye(3).expand_as(output.rotation)
     assert torch.equal(output.rotation, expected)
-

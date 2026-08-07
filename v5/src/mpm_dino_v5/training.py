@@ -16,7 +16,7 @@ from mpm_dino_v4.v41_data import UIDBalancedSampler
 from .config import V5Config
 from .data import dataset, interaction_labels, model_inputs, targets_and_stages
 from .losses import (
-    com_mse,
+    com_trajectory_loss,
     event_normalized_deformation_mse,
     interaction_auxiliary_loss,
     rotation_geodesic_mean,
@@ -123,6 +123,7 @@ def _fit(stage: str, module: nn.Module, train_loader, validation_loader, device,
             bad_epochs = 0
             atomic_save({
                 "contract": "v5_random_initialization_stage_v1",
+                "architecture_contract": getattr(module, "contract_version", None),
                 "stage": stage,
                 "seed": seed,
                 "model": module.state_dict(),
@@ -143,7 +144,10 @@ def build_modules(config: V5Config, device="cpu"):
     config.validate()
     values = config.model
     return (
-        V5COMModel(values.hidden_dim, values.frames, values.dropout).to(device),
+        V5COMModel(
+            values.hidden_dim, values.frames, values.dropout,
+            values.blocks, values.heads,
+        ).to(device),
         V5RotationModel(values.hidden_dim, values.frames, values.dropout).to(device),
         V5InteractionEncoder(values.interaction_dim, values.blocks, values.dropout).to(device),
         V5DeformationDecoder(values.interaction_dim, values.hidden_dim, values.blocks, values.dropout).to(device),
@@ -154,6 +158,12 @@ def load_v5_stage(module: nn.Module, path: str | Path, expected_stage: str, devi
     state = torch.load(path, map_location=device, weights_only=False)
     if state.get("contract") != "v5_random_initialization_stage_v1" or state.get("stage") != expected_stage:
         raise ValueError(f"expected a V5 {expected_stage} checkpoint")
+    required_contract = getattr(module, "contract_version", None)
+    if required_contract is not None and state.get("architecture_contract") != required_contract:
+        raise ValueError(
+            f"incompatible {expected_stage} architecture: expected {required_contract}; "
+            "the simplified V5 checkpoint must not be reused"
+        )
     module.load_state_dict(state["model"], strict=True)
     return state
 
@@ -166,8 +176,11 @@ def train_com(root, manifest, output, seed, config=V5Config(), options=TrainOpti
 
     def step(batch):
         targets, _ = targets_and_stages(batch)
-        predicted, _ = com(batch["x0"], batch["x1"], batch["input_mask"], batch["dt"], batch["gravity"])
-        return com_mse(predicted, targets.com, targets.radius, batch["target_mask"].any(2))
+        predicted, _ = com(**model_inputs(batch))
+        return com_trajectory_loss(
+            predicted, targets.com, targets.radius,
+            batch["target_mask"].any(2),
+        ).total
 
     return _fit("com", com, train_loader, validation_loader, device, step, Path(output), seed, config, options)
 
@@ -200,7 +213,7 @@ def train_interaction(root, manifest, output, seed, com_checkpoint, rotation_che
     def step(batch):
         targets, stages = targets_and_stages(batch)
         with torch.no_grad():
-            predicted_com, _ = com(batch["x0"], batch["x1"], batch["input_mask"], batch["dt"], batch["gravity"])
+            predicted_com, _ = com(**model_inputs(batch))
             predicted_rotation = (
                 rotation.identity(len(batch["x0"]), config.model.frames, device=device, dtype=batch["x0"].dtype)
                 if use_identity_rotation else rotation(batch["x0"], batch["x1"], batch["input_mask"])
@@ -233,7 +246,7 @@ def train_deformation(root, manifest, output, seed, com_checkpoint, rotation_che
     def step(batch):
         targets, stages = targets_and_stages(batch)
         with torch.no_grad():
-            predicted_com, _ = com(batch["x0"], batch["x1"], batch["input_mask"], batch["dt"], batch["gravity"])
+            predicted_com, _ = com(**model_inputs(batch))
             predicted_rotation = (
                 rotation.identity(len(batch["x0"]), config.model.frames, device=device, dtype=batch["x0"].dtype)
                 if use_identity_rotation else rotation(batch["x0"], batch["x1"], batch["input_mask"])
@@ -277,7 +290,7 @@ def train_memory(root, manifest, output, seed, com_checkpoint, rotation_checkpoi
     def step(batch):
         targets, stages = targets_and_stages(batch)
         with torch.no_grad():
-            predicted_com, _ = com(batch["x0"], batch["x1"], batch["input_mask"], batch["dt"], batch["gravity"])
+            predicted_com, _ = com(**model_inputs(batch))
             predicted_rotation = (
                 rotation.identity(len(batch["x0"]), config.model.frames, device=device, dtype=batch["x0"].dtype)
                 if use_identity_rotation else rotation(batch["x0"], batch["x1"], batch["input_mask"])

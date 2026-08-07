@@ -7,6 +7,7 @@ import torch
 from torch import Tensor
 
 from mpm_dino_v4.v41_data import V41TrajectoryDataset, validate_v41_manifest
+from mpm_dino_v4.v41_data import MODEL_INPUT_KEYS
 from mpm_dino_v4.v42_geometry import CanonicalTargets, canonical_targets
 from mpm_dino_v4.v42_stages import StageMetadata, derive_impact_stages
 
@@ -61,8 +62,4 @@ def interaction_labels(batch: dict, targets: CanonicalTargets, stages: StageMeta
 
 
 def model_inputs(batch: dict) -> dict:
-    return {
-        key: batch[key]
-        for key in ("x0", "x1", "input_mask", "dt", "gravity", "floor_z")
-    }
-
+    return {key: batch[key] for key in MODEL_INPUT_KEYS}

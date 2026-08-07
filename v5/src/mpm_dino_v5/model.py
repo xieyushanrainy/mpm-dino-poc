@@ -7,6 +7,8 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 from mpm_dino_v4.v42_geometry import identity_rotation_6d, rotation_6d_to_matrix
+from mpm_dino_v4.v42_model import V42RotationAwareSurrogate
+from mpm_dino_v4.v41_data import MODEL_INPUT_KEYS
 
 
 def masked_mean(value: Tensor, mask: Tensor, dim: int = 1) -> Tensor:
@@ -67,21 +69,27 @@ class TemporalMLP(nn.Module):
 
 
 class V5COMModel(nn.Module):
-    def __init__(self, hidden_dim: int = 128, frames: int = 59, dropout: float = 0.1):
+    """V4.2-class pointwise physical COM trunk, initialized from scratch."""
+
+    contract_version = "v5_physical_com_v2"
+
+    def __init__(self, hidden_dim: int = 128, frames: int = 59, dropout: float = 0.1, blocks: int = 4, heads: int = 4):
         super().__init__()
         self.frames = frames
-        self.residual = TemporalMLP(9, hidden_dim, 3, frames, dropout)
+        self.physical = V42RotationAwareSurrogate(
+            local_mode="zero", hidden_dim=hidden_dim, blocks=blocks,
+            heads=heads, dropout=dropout, frames=frames,
+            local_trunk_alpha=0.0, gradient_checkpointing=True,
+            rotation_parameterization="6d", rotation_attention=False,
+            rotation_dynamics=False,
+        )
 
-    def forward(self, x0: Tensor, x1: Tensor, mask: Tensor, dt: Tensor, gravity: Tensor) -> tuple[Tensor, Tensor]:
-        base = ballistic_com(x0, x1, mask, dt, gravity, self.frames)
-        c0 = masked_mean(x0, mask)
-        c1 = masked_mean(x1, mask)
-        velocity_step = c1 - c0
-        context = torch.cat((c1, velocity_step, gravity), -1)
-        correction = self.residual(context)
-        correction = correction.clone()
-        correction[:, 0] = 0
-        return base + correction, base
+    def forward(self, **inputs) -> tuple[Tensor, Tensor]:
+        missing = set(MODEL_INPUT_KEYS) - inputs.keys()
+        if missing:
+            raise ValueError(f"physical COM input is missing {sorted(missing)}")
+        output = self.physical(**{key: inputs[key] for key in MODEL_INPUT_KEYS})
+        return output.com, output.ballistic_com
 
 
 class V5RotationModel(nn.Module):
@@ -196,8 +204,10 @@ class V5CausalDeformationModel(nn.Module):
         self.interaction_encoder = interaction
         self.deformation_decoder = decoder
 
-    def forward(self, *, x0: Tensor, x1: Tensor, input_mask: Tensor, dt: Tensor, gravity: Tensor, floor_z: Tensor, use_identity_rotation: bool = False) -> FactorizedMotionOutput:
-        com, ballistic = self.com_model(x0, x1, input_mask, dt, gravity)
+    def forward(self, *, use_identity_rotation: bool = False, **inputs) -> FactorizedMotionOutput:
+        x0, x1 = inputs["x0"], inputs["x1"]
+        input_mask, floor_z = inputs["input_mask"], inputs["floor_z"]
+        com, ballistic = self.com_model(**inputs)
         if use_identity_rotation:
             rotation = self.rotation_model.identity(len(x0), com.shape[1], device=x0.device, dtype=x0.dtype)
         else:
@@ -210,4 +220,3 @@ class V5CausalDeformationModel(nn.Module):
         deformation = self.deformation_decoder(reference_shape, interaction.latent, input_mask)
         position = reconstruct_positions(com, rotation, reference_shape, deformation)
         return FactorizedMotionOutput(com, ballistic, rotation, reference_shape, interaction, deformation, position)
-
